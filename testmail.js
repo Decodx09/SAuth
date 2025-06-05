@@ -5,7 +5,7 @@ require("dotenv").config();
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: process.env.EMAIL_PORT,
-  secure: false, // true for 465, false for 587
+  secure: false, 
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD,
@@ -14,7 +14,7 @@ const transporter = nodemailer.createTransport({
 
 const mailOptions = {
   from: `"Shivansh" <${process.env.EMAIL_USER}>`,
-  to: "shivanshsukhijaengineer@gmail.com", // Replace with any test email
+  to: "shivanshsukhijaengineer@gmail.com",
   subject: "SMTP Test",
   text: "If you received this, SMTP is working!",
 };
