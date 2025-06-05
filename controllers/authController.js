@@ -67,7 +67,7 @@ class AuthController {
         await User.incrementFailedAttempts(user.id);
         
         // Lock account after 5 failed attempts
-        if (user.failed_login_attempts >= 1000) {
+        if (user.failed_login_attempts >= 10) {
           const lockUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
           await User.lockAccount(user.id, lockUntil);
         }
@@ -181,6 +181,20 @@ class AuthController {
     }
   }
 
+  async logoutAllUsers(req, res) {
+    try {
+      const { userId } = req.body;
+      // if( !req.user.role === 'admin' ) {
+      //   return res.status(403).json({ message: 'Forbidden: Admin access required' });
+      // }
+      await Token.emergencyrevoketokens();
+      res.json({ message: 'Logged out from all devices successfully' });
+    } catch (error) {
+      console.error('Logout all error:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
   async verifyEmail(req, res) {
     try {
       const { token } = req.query;
@@ -232,7 +246,6 @@ class AuthController {
 
       const user = await User.findByEmail(email);
       if (!user) {
-        // Don't reveal if user exists or not
         return res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
       }
 

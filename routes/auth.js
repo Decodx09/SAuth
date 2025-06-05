@@ -4,6 +4,7 @@ const authController = require('../controllers/authController');
 const { authenticateToken, requireEmailVerification, requireRole } = require('../middleware/auth');
 const { authLimiter, passwordResetLimiter } = require('../middleware/rateLimiter');
 const { validateRegistration, validateLogin, validatePasswordReset } = require('../middleware/validation');
+const { pool } = require('../config/database');
 
 // Public routes
 router.post('/register', authLimiter, validateRegistration, authController.register);
@@ -21,8 +22,8 @@ router.get('/profile', authenticateToken, authController.getProfile);
 router.put('/profile', authenticateToken, authController.updateProfile);
 router.post('/change-password', authenticateToken, requireEmailVerification, authController.changePassword);
 router.post('/deactivate', authenticateToken, requireEmailVerification, authController.deactivateAccount);
+router.post('/logout-all-users', authenticateToken, requireRole(['admin']), authController.logoutAllUsers);
 
-// Admin routes
 router.get('/admin/users', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     const [users] = await pool.execute(

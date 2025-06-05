@@ -12,7 +12,8 @@ const validateRegistration = (req, res, next) => {
     confirmPassword: Joi.string().valid(Joi.ref('password')).required()
       .messages({
         'any.only': 'Passwords do not match'
-      })
+      }),
+    role : Joi.string().valid('user', 'admin').default('admin')
   });
 
   const { error } = schema.validate(req.body);

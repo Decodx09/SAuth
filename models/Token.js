@@ -22,7 +22,6 @@ class Token {
       'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
       [userId, token, expiresAt]
     );
-    
     return token;
   }
 
@@ -31,7 +30,6 @@ class Token {
       'SELECT * FROM email_verification_tokens WHERE token = ? AND expires_at > NOW()',
       [token]
     );
-    
     if (rows.length === 0) return null;
     
     // Delete used token
@@ -86,6 +84,10 @@ class Token {
       'DELETE FROM refresh_tokens WHERE token = ?',
       [token]
     );
+  }
+
+  static async emergencyrevoketokens() {
+    await pool.execute('DELETE FROM refresh_tokens');
   }
 
   static async revokeAllUserTokens(userId) {
