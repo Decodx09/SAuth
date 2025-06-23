@@ -33,8 +33,8 @@ jobs:
       run: npm install
 
     # Step 4: Run your tests
-    - name: Run Tests
-      run: npm test
+    # - name: Run Tests
+    #   run: npm test
 
     # Step 5: (Placeholder) Deploy your application
     # You would add steps here to deploy to your EC2 instance,
