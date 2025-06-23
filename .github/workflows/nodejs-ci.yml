@@ -29,12 +29,10 @@ jobs:
 
     steps:
       - name: Deploy to EC2
-        # Using a specific version is better for stability
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
-          # This key is for logging into the EC2 instance
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             # Exit immediately if a command exits with a non-zero status
@@ -45,28 +43,25 @@ jobs:
             eval $(ssh-agent -s)
             ssh-add - <<< "${{ secrets.SSH_PRIVATE_KEY_DEPLOY }}"
             
-            # Add GitHub's public key to known_hosts to avoid interactive prompts
+            # Add GitHub's public key to known_hosts
             ssh-keyscan github.com >> ~/.ssh/known_hosts
 
             # Navigate to the deployment directory on the server
             cd /home/ec2-user/
 
             # Check if the project directory exists
-            if [ -d "AuthLibrary" ]
+            if [ -d "SAuth" ] 
             then
-              echo "Directory AuthLibrary exists. Pulling latest changes."
-              cd AuthLibrary
+              echo "Directory SAuth exists. Pulling latest changes."
+              cd SAuth 
               git pull
             else
-              echo "Directory AuthLibrary does not exist. Cloning repository."
-              # Use the SSH URL for cloning your private repository
+              echo "Directory SAuth does not exist. Cloning repository."
+              # This line is already correct
               git clone git@github.com:Decodx09/SAuth.git
-              cd AuthLibrary
+              cd SAuth 
             fi
 
-            # Install dependencies and restart the app with PM2
             echo "Installing dependencies and restarting application..."
             npm install
-            
-            # Use the full, absolute path to pm2 for reliability
             /usr/bin/pm2 restart my-app || /usr/bin/pm2 start "npm start" --name my-app
