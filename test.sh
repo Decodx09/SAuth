@@ -19,7 +19,7 @@ do
        "email": "shivanshsukhija+test'"${i}"'@gmail.com",
        "password": "Wordlikeme1!",
        "confirmPassword": "Wordlikeme1!",
-       "role": "user"
+       "role": "user" lol
    }'
    
    # This will print the server's response for each request.
