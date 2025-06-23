@@ -29,29 +29,44 @@ jobs:
 
     steps:
       - name: Deploy to EC2
-        uses: appleboy/ssh-action@master
+        # Using a specific version is better for stability
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
+          # This key is for logging into the EC2 instance
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
-            # Go to the home directory
+            # Exit immediately if a command exits with a non-zero status
+            set -e
+
+            # Set up the SSH agent to use the deploy key for git
+            echo "Setting up SSH agent for Git authentication..."
+            eval $(ssh-agent -s)
+            ssh-add - <<< "${{ secrets.SSH_PRIVATE_KEY_DEPLOY }}"
+            
+            # Add GitHub's public key to known_hosts to avoid interactive prompts
+            ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+            # Navigate to the deployment directory on the server
             cd /home/ec2-user/
 
-            # Check if the directory "AuthLibrary" exists
+            # Check if the project directory exists
             if [ -d "AuthLibrary" ]
             then
-              # If it exists, pull the latest changes
               echo "Directory AuthLibrary exists. Pulling latest changes."
               cd AuthLibrary
-              git pull origin main
+              git pull
             else
-              # If it does not exist, clone the repository
               echo "Directory AuthLibrary does not exist. Cloning repository."
-              git clone https://github.com/your-username/AuthLibrary.git
+              # Use the SSH URL for cloning your private repository
+              git clone git@github.com:Decodx09/AuthLibrary.git
               cd AuthLibrary
             fi
 
-            # Install dependencies and restart the app
+            # Install dependencies and restart the app with PM2
+            echo "Installing dependencies and restarting application..."
             npm install
-            pm2 restart my-app || pm2 start "npm start" --name my-app
+            
+            # Use the full, absolute path to pm2 for reliability
+            /usr/bin/pm2 restart my-app || /usr/bin/pm2 start "npm start" --name my-app
