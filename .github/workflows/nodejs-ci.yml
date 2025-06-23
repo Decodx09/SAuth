@@ -60,7 +60,7 @@ jobs:
             else
               echo "Directory AuthLibrary does not exist. Cloning repository."
               # Use the SSH URL for cloning your private repository
-              git clone git@github.com:Decodx09/AuthLibrary.git
+              git clone git@github.com:Decodx09/SAuth.git
               cd AuthLibrary
             fi
 
