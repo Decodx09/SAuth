@@ -1,0 +1,44 @@
+# .github/workflows/nodejs-ci.yml
+
+name: Node.js CI/CD Pipeline
+
+# 1. Trigger: Run this workflow on a push or pull request to the 'main' branch
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# 2. Jobs: Define what work to perform
+jobs:
+  build-and-test:
+    # 3. Runner: Use an Ubuntu runner provided by GitHub
+    runs-on: ubuntu-latest
+
+    # 4. Steps: A sequence of tasks to execute
+    steps:
+    # Step 1: Check out your repository code
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # Step 2: Set up the desired Node.js version
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18' # Specify the Node.js version you need
+        cache: 'npm' # Cache npm dependencies to speed up future runs
+
+    # Step 3: Install project dependencies
+    - name: Install Dependencies
+      run: npm install
+
+    # Step 4: Run your tests
+    - name: Run Tests
+      run: npm test
+
+    # Step 5: (Placeholder) Deploy your application
+    # You would add steps here to deploy to your EC2 instance,
+    # e.g., using SSH to copy files and restart your app.
+    - name: Deploy
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: echo "This is where a real deployment script would run!"

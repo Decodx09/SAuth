@@ -99,7 +99,6 @@ class AuthController {
 
       const refreshToken = await Token.createRefreshToken(user.id);
 
-      // Interesting Send login alert email (optional)
       if (process.env.NODE_ENV === 'production') {
         await emailService.sendLoginAlert(user.email, user.first_name, ipAddress, userAgent);
       }

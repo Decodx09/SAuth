@@ -35,6 +35,48 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+app.post('/api/auth/refresh', async (req, res) => {
+    
+  // 1. Get the refresh token from the HttpOnly cookie
+  const refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+      return res.status(401).json({ message: 'No refresh token provided.' });
+  }
+
+  // You should also have a check here to see if the refresh token is in your database
+  // and has not been revoked. For example:
+  // const tokenInDb = await User.findOne({ refreshToken: refreshToken });
+  // if (!tokenInDb) return res.status(403).json({ message: 'Forbidden.' });
+
+  try {
+      // 2. Verify the token using your REFRESH_TOKEN_SECRET
+      const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+      
+      // 3. If valid, create a new access token
+      const newAccessToken = jwt.sign(
+          { userId: decoded.userId, role: decoded.role }, // Payload
+          process.env.ACCESS_TOKEN_SECRET,               // Secret Key
+          { expiresIn: '15m' }                           // Expiration
+      );
+
+      // 4. Send the new access token to the client
+      res.json({ accessToken: newAccessToken });
+
+  } catch (err) {s
+      // If verification fails (expired, invalid signature, etc.)
+      return res.status(403).json({ message: 'Invalid or expired refresh token.' });
+  }
+});
+
+// When a user logs in successfully...
+res.cookie('refreshToken', newRefreshToken, {
+  httpOnly: true,                 // Cannot be accessed by JS
+  secure: true,                   // Only sent over HTTPS
+  sameSite: 'strict',             // Mitigates CSRF attacks
+  maxAge: 30 * 24 * 60 * 60 * 1000  // 30 days
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
