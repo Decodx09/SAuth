@@ -35,7 +35,23 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
-            cd /Users/shivansh/Desktop/AuthLibrary
-            git pull origin main
+            # Go to the home directory
+            cd /home/ec2-user/
+
+            # Check if the directory "AuthLibrary" exists
+            if [ -d "AuthLibrary" ]
+            then
+              # If it exists, pull the latest changes
+              echo "Directory AuthLibrary exists. Pulling latest changes."
+              cd AuthLibrary
+              git pull origin main
+            else
+              # If it does not exist, clone the repository
+              echo "Directory AuthLibrary does not exist. Cloning repository."
+              git clone https://github.com/your-username/AuthLibrary.git
+              cd AuthLibrary
+            fi
+
+            # Install dependencies and restart the app
             npm install
-            pm2 restart my-app
+            pm2 restart my-app || pm2 start "npm start" --name my-app
