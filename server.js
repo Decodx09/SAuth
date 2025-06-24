@@ -69,13 +69,13 @@ app.post('/api/auth/refresh', async (req, res) => {
   }
 });
 
-// When a user logs in successfully...
-res.cookie('refreshToken', newRefreshToken, {
-  httpOnly: true,                 // Cannot be accessed by JS
-  secure: true,                   // Only sent over HTTPS
-  sameSite: 'strict',             // Mitigates CSRF attacks
-  maxAge: 30 * 24 * 60 * 60 * 1000  // 30 days
-});
+// // When a user logs in successfully...
+// res.cookie('refreshToken', newRefreshToken, {
+//   httpOnly: true,                 // Cannot be accessed by JS
+//   secure: true,                   // Only sent over HTTPS
+//   sameSite: 'strict',             // Mitigates CSRF attacks
+//   maxAge: 30 * 24 * 60 * 60 * 1000  // 30 days
+// });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
