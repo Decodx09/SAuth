@@ -1,4 +1,4 @@
-name: Node.js CI/CD Pipeline with Docker and Security Scans
+name: SAuth CI/CD Pipeline
 
 on:
   push:
@@ -21,18 +21,16 @@ jobs:
         run: npm install
 
       - name: Lint Code with ESLint
-        # This step will run your project's linter. See notes below.
         run: npm run lint
 
       # - name: Run Tests
       #   run: npm test
 
   codeql-analysis:
-    # This job provides deep security scanning, native to GitHub
     needs: build-and-test
     runs-on: ubuntu-latest
     permissions:
-      security-events: write # Required for CodeQL to upload results
+      security-events: write 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -93,7 +91,6 @@ jobs:
         run: docker push ${{ steps.meta.outputs.tags }}
 
   deploy:
-    # This job now depends on the new security scans
     needs: [codeql-analysis, build-and-scan-docker-image]
     runs-on: ubuntu-latest
 
