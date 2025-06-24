@@ -1,25 +1,25 @@
-const Joi = require('joi');
+const Joi = require("joi");
 
 const validateRegistration = (req, res, next) => {
   const schema = Joi.object({
     email: Joi.string().email().required(),
-    password: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])')).required()
+    password: Joi.string().min(8).pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])")).required()
       .messages({
-        'string.pattern.base': 'Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character'
+        "string.pattern.base": "Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character"
       }),
     firstName: Joi.string().min(2).max(50).required(),
     lastName: Joi.string().min(2).max(50).required(),
-    confirmPassword: Joi.string().valid(Joi.ref('password')).required()
+    confirmPassword: Joi.string().valid(Joi.ref("password")).required()
       .messages({
-        'any.only': 'Passwords do not match'
+        "any.only": "Passwords do not match"
       }),
-    role : Joi.string().valid('user', 'admin').default('admin')
+    role : Joi.string().valid("user", "admin").default("admin")
   });
 
   const { error } = schema.validate(req.body);
   if (error) {
     return res.status(400).json({
-      message: 'Validation error',
+      message: "Validation error",
       errors: error.details.map(detail => detail.message)
     });
   }
@@ -36,7 +36,7 @@ const validateLogin = (req, res, next) => {
   const { error } = schema.validate(req.body);
   if (error) {
     return res.status(400).json({
-      message: 'Validation error',
+      message: "Validation error",
       errors: error.details.map(detail => detail.message)
     });
   }
@@ -47,20 +47,20 @@ const validateLogin = (req, res, next) => {
 const validatePasswordReset = (req, res, next) => {
   const schema = Joi.object({
     token: Joi.string().required(),
-    newPassword: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])')).required()
+    newPassword: Joi.string().min(8).pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])")).required()
       .messages({
-        'string.pattern.base': 'Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character'
+        "string.pattern.base": "Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character"
       }),
-    confirmPassword: Joi.string().valid(Joi.ref('newPassword')).required()
+    confirmPassword: Joi.string().valid(Joi.ref("newPassword")).required()
       .messages({
-        'any.only': 'Passwords do not match'
+        "any.only": "Passwords do not match"
       })
   });
 
   const { error } = schema.validate(req.body);
   if (error) {
     return res.status(400).json({
-      message: 'Validation error',
+      message: "Validation error",
       errors: error.details.map(detail => detail.message)
     });
   }

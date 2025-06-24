@@ -1,8 +1,8 @@
-const User = require('../models/User');
-const Token = require('../models/Token');
-const emailService = require('../services/emailService');
-const jwt = require('jsonwebtoken');
-const { pool } = require('../config/database');
+const User = require("../models/User");
+const Token = require("../models/Token");
+const emailService = require("../services/emailService");
+const jwt = require("jsonwebtoken");
+const { pool } = require("../config/database");
 
 class AuthController {
   async register(req, res) {
@@ -12,7 +12,7 @@ class AuthController {
       // Check if user already exists
       const existingUser = await User.findByEmail(email);
       if (existingUser) {
-        return res.status(400).json({ message: 'User already exists with this email' });
+        return res.status(400).json({ message: "User already exists with this email" });
       }
 
       // Create user
@@ -25,12 +25,12 @@ class AuthController {
       await emailService.sendVerificationEmail(email, verificationToken, firstName);
 
       res.status(201).json({
-        message: 'User registered successfully. Please check your email for verification.',
+        message: "User registered successfully. Please check your email for verification.",
         userId
       });
     } catch (error) {
-      console.error('Registration error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -38,25 +38,25 @@ class AuthController {
     try {
       const { email, password } = req.body;
       const ipAddress = req.ip || req.connection.remoteAddress;
-      const userAgent = req.get('User-Agent');
+      const userAgent = req.get("User-Agent");
 
       // Find user
       const user = await User.findByEmail(email);
       
       // Log login attempt
       await pool.execute(
-        'INSERT INTO login_attempts (email, ip_address, user_agent, success) VALUES (?, ?, ?, ?)',
+        "INSERT INTO login_attempts (email, ip_address, user_agent, success) VALUES (?, ?, ?, ?)",
         [email, ipAddress, userAgent, false]
       );
 
       if (!user) {
-        return res.status(401).json({ message: 'Invalid credentials' });
+        return res.status(401).json({ message: "Invalid credentials" });
       }
 
       // Check if account is locked
       if (user.locked_until && new Date() < new Date(user.locked_until)) {
         return res.status(423).json({ 
-          message: 'Account is temporarily locked due to multiple failed login attempts',
+          message: "Account is temporarily locked due to multiple failed login attempts",
           lockedUntil: user.locked_until
         });
       }
@@ -72,12 +72,12 @@ class AuthController {
           await User.lockAccount(user.id, lockUntil);
         }
         
-        return res.status(401).json({ message: 'Invalid credentials' });
+        return res.status(401).json({ message: "Invalid credentials" });
       }
 
       // Check if user is active
       if (!user.is_active) {
-        return res.status(401).json({ message: 'Account is deactivated' });
+        return res.status(401).json({ message: "Account is deactivated" });
       }
 
       // Successful login
@@ -86,7 +86,7 @@ class AuthController {
       
       // Update login attempt record
       await pool.execute(
-        'UPDATE login_attempts SET success = TRUE WHERE email = ? AND ip_address = ? ORDER BY attempted_at DESC LIMIT 1',
+        "UPDATE login_attempts SET success = TRUE WHERE email = ? AND ip_address = ? ORDER BY attempted_at DESC LIMIT 1",
         [email, ipAddress]
       );
 
@@ -94,17 +94,17 @@ class AuthController {
       const accessToken = jwt.sign(
         { userId: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
-        { expiresIn: '15m' }
+        { expiresIn: "15m" }
       );
 
       const refreshToken = await Token.createRefreshToken(user.id);
 
-      if (process.env.NODE_ENV === 'production') {
+      if (process.env.NODE_ENV === "production") {
         await emailService.sendLoginAlert(user.email, user.first_name, ipAddress, userAgent);
       }
 
       res.json({
-        message: 'Login successful',
+        message: "Login successful",
         accessToken,
         refreshToken,
         user: {
@@ -117,8 +117,8 @@ class AuthController {
         }
       });
     } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -127,30 +127,30 @@ class AuthController {
       const { refreshToken } = req.body;
 
       if (!refreshToken) {
-        return res.status(401).json({ message: 'Refresh token required' });
+        return res.status(401).json({ message: "Refresh token required" });
       }
 
       const tokenData = await Token.verifyRefreshToken(refreshToken);
       if (!tokenData) {
-        return res.status(403).json({ message: 'Invalid or expired refresh token' });
+        return res.status(403).json({ message: "Invalid or expired refresh token" });
       }
 
       const user = await User.findById(tokenData.user_id);
       if (!user || !user.is_active) {
-        return res.status(403).json({ message: 'User not found or inactive' });
+        return res.status(403).json({ message: "User not found or inactive" });
       }
 
       // Generate new access token
       const accessToken = jwt.sign(
         { userId: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
-        { expiresIn: '15m' }
+        { expiresIn: "15m" }
       );
 
       res.json({ accessToken });
     } catch (error) {
-      console.error('Token refresh error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Token refresh error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -162,10 +162,10 @@ class AuthController {
         await Token.revokeRefreshToken(refreshToken);
       }
 
-      res.json({ message: 'Logged out successfully' });
+      res.json({ message: "Logged out successfully" });
     } catch (error) {
-      console.error('Logout error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Logout error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -173,10 +173,10 @@ class AuthController {
     try {
       const userId = req.user.id;
       await Token.revokeAllUserTokens(userId);
-      res.json({ message: 'Logged out from all devices successfully' });
+      res.json({ message: "Logged out from all devices successfully" });
     } catch (error) {
-      console.error('Logout all error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Logout all error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -187,10 +187,10 @@ class AuthController {
       //   return res.status(403).json({ message: 'Forbidden: Admin access required' });
       // }
       await Token.emergencyrevoketokens();
-      res.json({ message: 'Logged out from all devices successfully' });
+      res.json({ message: "Logged out from all devices successfully" });
     } catch (error) {
-      console.error('Logout all error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Logout all error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -199,20 +199,20 @@ class AuthController {
       const { token } = req.query;
 
       if (!token) {
-        return res.status(400).json({ message: 'Verification token required' });
+        return res.status(400).json({ message: "Verification token required" });
       }
 
       const tokenData = await Token.verifyEmailToken(token);
       if (!tokenData) {
-        return res.status(400).json({ message: 'Invalid or expired verification token' });
+        return res.status(400).json({ message: "Invalid or expired verification token" });
       }
 
       await User.verifyEmail(tokenData.user_id);
 
-      res.json({ message: 'Email verified successfully' });
+      res.json({ message: "Email verified successfully" });
     } catch (error) {
-      console.error('Email verification error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Email verification error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -222,20 +222,20 @@ class AuthController {
 
       const user = await User.findByEmail(email);
       if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+        return res.status(404).json({ message: "User not found" });
       }
 
       if (user.is_verified) {
-        return res.status(400).json({ message: 'Email is already verified' });
+        return res.status(400).json({ message: "Email is already verified" });
       }
 
       const verificationToken = await Token.createEmailVerificationToken(user.id);
       await emailService.sendVerificationEmail(user.email, verificationToken, user.first_name);
 
-      res.json({ message: 'Verification email sent successfully' });
+      res.json({ message: "Verification email sent successfully" });
     } catch (error) {
-      console.error('Resend verification error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Resend verification error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -245,16 +245,16 @@ class AuthController {
 
       const user = await User.findByEmail(email);
       if (!user) {
-        return res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+        return res.json({ message: "If an account with that email exists, a password reset link has been sent." });
       }
 
       const resetToken = await Token.createPasswordResetToken(user.id);
       await emailService.sendPasswordResetEmail(user.email, resetToken, user.first_name);
 
-      res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+      res.json({ message: "If an account with that email exists, a password reset link has been sent." });
     } catch (error) {
-      console.error('Forgot password error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Forgot password error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -264,7 +264,7 @@ class AuthController {
       
       const tokenData = await Token.verifyPasswordResetToken==(token);
       if (!tokenData) {
-        return res.status(400).json({ message: 'Invalid or expired reset token' });
+        return res.status(400).json({ message: "Invalid or expired reset token" });
       }
 
       await User.updatePassword(tokenData.user_id, newPassword);
@@ -272,10 +272,10 @@ class AuthController {
       // Revoke all refresh tokens to force re-login
       await Token.revokeAllUserTokens(tokenData.user_id);
 
-      res.json({ message: 'Password reset successfully' });
+      res.json({ message: "Password reset successfully" });
     } catch (error) {
-      console.error('Reset password error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Reset password error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -288,7 +288,7 @@ class AuthController {
       const isValidPassword = await User.comparePassword(currentPassword, user.password);
       
       if (!isValidPassword) {
-        return res.status(400).json({ message: 'Current password is incorrect' });
+        return res.status(400).json({ message: "Current password is incorrect" });
       }
 
       await User.updatePassword(userId, newPassword);
@@ -296,10 +296,10 @@ class AuthController {
       // Revoke all refresh tokens to force re-login on other devices
       await Token.revokeAllUserTokens(userId);
 
-      res.json({ message: 'Password changed successfully' });
+      res.json({ message: "Password changed successfully" });
     } catch (error) {
-      console.error('Change password error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Change password error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -317,8 +317,8 @@ class AuthController {
         lastLogin: user.last_login
       });
     } catch (error) {
-      console.error('Get profile error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Get profile error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -333,10 +333,10 @@ class AuthController {
 
       await User.updateProfile(userId, updates);
 
-      res.json({ message: 'Profile updated successfully' });
+      res.json({ message: "Profile updated successfully" });
     } catch (error) {
-      console.error('Update profile error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Update profile error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -347,10 +347,10 @@ class AuthController {
       await User.updateProfile(userId, { is_active: false });
       await Token.revokeAllUserTokens(userId);
 
-      res.json({ message: 'Account deactivated successfully' });
+      res.json({ message: "Account deactivated successfully" });
     } catch (error) {
-      console.error('Deactivate account error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error("Deactivate account error:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 }

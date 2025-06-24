@@ -1,5 +1,5 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+const mysql = require("mysql2/promise");
+require("dotenv").config();
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -83,9 +83,9 @@ const initDatabase = async () => {
         )
       `);
   
-      console.log('Database tables initialized successfully');
+      console.log("Database tables initialized successfully");
     } catch (error) {
-      console.error('Error initializing database:', error);
+      console.error("Error initializing database:", error);
       process.exit(1);
     }
   };

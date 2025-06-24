@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+const nodemailer = require("nodemailer");
 
 class EmailService {
   constructor() {
@@ -19,7 +19,7 @@ class EmailService {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
-      subject: 'Verify Your Email Address',
+      subject: "Verify Your Email Address",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Welcome ${firstName}!</h2>
@@ -44,7 +44,7 @@ class EmailService {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
-      subject: 'Password Reset Request',
+      subject: "Password Reset Request",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Hello ${firstName},</h2>
@@ -67,7 +67,7 @@ class EmailService {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
-      subject: 'New Login to Your Account',
+      subject: "New Login to Your Account",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Hello ${firstName},</h2>
