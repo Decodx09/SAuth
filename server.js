@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 require("dotenv").config();
+const jwt = require("jsonwebtoken");
 
 const { initDatabase } = require("./config/database");
 const authRoutes = require("./routes/auth");
@@ -63,7 +64,7 @@ app.post("/api/auth/refresh", async (req, res) => {
       // 4. Send the new access token to the client
       res.json({ accessToken: newAccessToken });
 
-  } catch (err) {s;
+  } catch (err) {;
       // If verification fails (expired, invalid signature, etc.)
       return res.status(403).json({ message: "Invalid or expired refresh token." });
   }
