@@ -340,6 +340,19 @@ class AuthController {
     }
   }
 
+  async activateAccount(req, res) {
+    try {
+      const userId = req.user.id;
+      
+      await User.updateProfile(userId, { is_active: true });
+
+      res.json({ message: "Account activated successfully" });
+    } catch (error) {
+      console.error("Activate account error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+
   async deactivateAccount(req, res) {
     try {
       const userId = req.user.id;
