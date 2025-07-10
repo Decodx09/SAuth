@@ -1,32 +1,73 @@
-Features
-A secure and feature-rich authentication and user management API.
+Here’s a professional, polished, and well-structured version of your feature list for a **GitHub README**, following standard open-source formatting best practices:
 
-Authentication
+---
 
-User Registration (/register) with validation & rate limiting.
+# 🔐 Authentication & User Management API
 
-User Login (/login) with validation & rate limiting.
+A **secure**, **feature-rich**, and **scalable** RESTful API built to handle user authentication, authorization, and account management with a focus on best practices like token security, validation, and role-based access control.
 
-Session persistence via Refresh Tokens (/refresh-token).
+---
 
-Email verification (/verify-email) and resend functionality.
+## ✨ Features Overview
 
-Account Recovery
+### 🔑 Authentication
 
-Secure "Forgot Password" flow (/forgot-password).
+* **User Registration** (`/register`)
+  Input validation, rate limiting, and email capture for secure onboarding.
 
-Token-based password reset (/reset-password).
+* **User Login** (`/login`)
+  Secure login with rate limiting to prevent brute-force attacks.
 
-User Account Management (Protected)
+* **Refresh Tokens** (`/refresh-token`)
+  Token-based session persistence and renewal without re-authentication.
 
-Logout from current device (/logout) or all devices (/logout-all).
+* **Email Verification** (`/verify-email`)
+  Email confirmation with support for resending verification links.
 
-Get and update user profile (/profile).
+---
 
-Change password from within user settings (/change-password).
+### 🛠️ Account Recovery
 
-Account deactivation (/deactivate) and reactivation (/activate).
+* **Forgot Password** (`/forgot-password`)
+  Secure endpoint to trigger password reset flow.
 
-Admin
+* **Reset Password** (`/reset-password`)
+  Token-based flow allowing users to safely set a new password.
 
-Force logout for all users on the platform (/logout-all-users) - requires admin role.
+---
+
+### 👤 User Account Management *(Authenticated)*
+
+* **Logout (Single Session)** (`/logout`)
+  Invalidate the current device’s session.
+
+* **Logout All Sessions** (`/logout-all`)
+  Invalidate all active sessions across devices.
+
+* **Get & Update Profile** (`/profile`)
+  Retrieve and update personal user information.
+
+* **Change Password** (`/change-password`)
+  Secure endpoint to update password from within the user settings.
+
+* **Deactivate Account** (`/deactivate`)
+  Temporarily disable user account access.
+
+* **Reactivate Account** (`/activate`)
+  Re-enable access to a previously deactivated account.
+
+---
+
+### 🛡️ Admin Functionality *(Role: Admin)*
+
+* **Force Logout All Users** (`/logout-all-users`)
+  Immediately revoke access for all active sessions across the platform.
+
+---
+
+Let me know if you'd like to add:
+
+* 🌐 OpenAPI/Swagger documentation section
+* 🧪 Testing instructions
+* 🏗️ Tech stack / architecture overview
+* 🚀 Deployment & environment setup guide
