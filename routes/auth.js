@@ -22,6 +22,7 @@ router.get("/profile", authenticateToken, authController.getProfile); // yes
 router.put("/profile", authenticateToken, authController.updateProfile); // yes
 router.post("/change-password", authenticateToken, requireEmailVerification, authController.changePassword); // yes
 router.post("/deactivate", authenticateToken, requireEmailVerification, authController.deactivateAccount); // yes
+router.post("/activate", authenticateToken, authController.activateAccount);
 router.post("/logout-all-users", authenticateToken, requireRole(["admin"]), authController.logoutAllUsers); // yes
 
 router.get("/admin/users", authenticateToken, requireRole(["admin"]), async (req, res) => { // yes
