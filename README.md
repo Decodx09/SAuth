@@ -62,12 +62,3 @@ A **secure**, **feature-rich**, and **scalable** RESTful API built to handle use
 
 * **Force Logout All Users** (`/logout-all-users`)
   Immediately revoke access for all active sessions across the platform.
-
----
-
-Let me know if you'd like to add:
-
-* 🌐 OpenAPI/Swagger documentation section
-* 🧪 Testing instructions
-* 🏗️ Tech stack / architecture overview
-* 🚀 Deployment & environment setup guide
