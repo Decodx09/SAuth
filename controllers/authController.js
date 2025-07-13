@@ -3,8 +3,475 @@ const Token = require("../models/Token");
 const emailService = require("../services/emailService");
 const jwt = require("jsonwebtoken");
 const { pool } = require("../config/database");
+const crypto = require("crypto");
+
+const generateAccessToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
+};
+
+// authController.js - Add this method
+
+
+// controllers/authController.js - Add these methods
+
+// Generate authorization code
+
+// Exchange authorization code for tokens
+const exchangeCode = async (req, res) => {
+  try {
+    const { code, client_id, client_secret, redirect_uri } = req.body;
+    
+    // Validate client credentials
+    const [client] = await pool.execute(
+      "SELECT * FROM oauth_clients WHERE client_id = ? AND client_secret = ? AND redirect_uri = ?",
+      [client_id, client_secret, redirect_uri]
+    );
+    
+    if (!client.length) {
+      return res.status(401).json({ error: "Invalid client credentials" });
+    }
+    
+    // Validate authorization code
+    const [authCode] = await pool.execute(
+      "SELECT * FROM authorization_codes WHERE code = ? AND client_id = ? AND redirect_uri = ? AND expires_at > NOW() AND used = 0",
+      [code, client_id, redirect_uri]
+    );
+    
+    if (!authCode.length) {
+      return res.status(400).json({ error: "Invalid or expired authorization code" });
+    }
+    
+    // Mark code as used
+    await pool.execute(
+      "UPDATE authorization_codes SET used = 1 WHERE code = ?",
+      [code]
+    );
+    
+    // Get user data
+    const [user] = await pool.execute(
+      "SELECT id, email, first_name, last_name, role FROM users WHERE id = ?",
+      [authCode[0].user_id]
+    );
+    
+    // Generate tokens
+    const accessToken = generateAccessToken(user[0]);
+    const refreshToken = Token.createRefreshToken();
+    
+    // Store refresh token
+    await pool.execute(
+      "INSERT INTO refresh_tokens (user_id, token, client_id, expires_at) VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))",
+      [user[0].id, refreshToken, client_id]
+    );
+    
+    // Return tokens and user info
+    res.json({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_type: "Bearer",
+      expires_in: 3600,
+      user: {
+        id: user[0].id,
+        email: user[0].email,
+        name: `${user[0].first_name} ${user[0].last_name}`,
+        role: user[0].role
+      }
+    });
+  } catch (error) {
+    console.error("Token exchange error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Validate user credentials
+    const [users] = await pool.execute(
+      "SELECT * FROM users WHERE email = ? AND is_active = 1",
+      [email]
+    );
+    
+    if (!users.length || !(await User.comparePassword(password, users[0].password))) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+    
+    const user = users[0];
+    
+    // Check if this is an OAuth flow
+    if (req.session.oauthRequest) {
+      const { client_id, redirect_uri, state } = req.session.oauthRequest;
+      
+      // Generate authorization code
+      const code = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      
+      await pool.execute(
+        "INSERT INTO authorization_codes (code, user_id, client_id, redirect_uri, expires_at) VALUES (?, ?, ?, ?, ?)",
+        [code, user.id, client_id, redirect_uri, expiresAt]
+      );
+      
+      // Clear OAuth request from session
+      delete req.session.oauthRequest;
+      
+      // Redirect with code
+      const redirectUrl = new URL(redirect_uri);
+      redirectUrl.searchParams.append("code", code);
+      if (state) redirectUrl.searchParams.append("state", state);
+      
+      return res.json({ 
+        oauth: true, 
+        redirectUrl: redirectUrl.toString() 
+      });
+    }
+    
+    // Normal login flow
+    const accessToken = Token.createRefreshToken(user);
+    const refreshToken = Token.createRefreshToken(user);
+    
+    // Set cookies
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 60 * 60 * 1000 // 1 hour
+    });
+    
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    });
+    
+    res.json({ message: "Login successful", user: { id: user.id, email: user.email } });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 
 class AuthController {
+
+  async generateAuthCode(req, res){
+    try {
+      const { client_id, redirect_uri, state, response_type } = req.query;
+      
+      // Validate client application
+      const [client] = await pool.execute(
+        "SELECT * FROM oauth_clients WHERE client_id = ? AND redirect_uri = ?",
+        [client_id, redirect_uri]
+      );
+      
+      if (!client.length) {
+        return res.status(400).json({ error: "Invalid client" });
+      }
+      
+      // Check if user is logged in
+      if (!req.user) {
+        // Store the OAuth request and redirect to login
+        req.session.oauthRequest = { client_id, redirect_uri, state };
+        return res.redirect("/login?oauth=true");
+      }
+      
+      // Generate authorization code
+      const code = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      
+      // Store authorization code
+      await pool.execute(
+        "INSERT INTO authorization_codes (code, user_id, client_id, redirect_uri, expires_at) VALUES (?, ?, ?, ?, ?)",
+        [code, req.user.id, client_id, redirect_uri, expiresAt]
+      );
+      
+      // Redirect back to client with code
+      const redirectUrl = new URL(redirect_uri);
+      redirectUrl.searchParams.append("code", code);
+      if (state) redirectUrl.searchParams.append("state", state);
+      
+      res.redirect(redirectUrl.toString());
+    } catch (error) {
+      console.error("Authorization error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  };
+
+  async validateToken(req, res) {
+    try {
+      const authHeader = req.headers.authorization;
+      const token = authHeader && authHeader.split(" ")[1];
+      
+      if (!token) {
+        return res.status(401).json({ error: "No token provided" });
+      }
+      
+      // Verify JWT
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Get fresh user data
+      const [users] = await pool.execute(
+        "SELECT id, email, first_name, last_name, role, is_active FROM users WHERE id = ?",
+        [decoded.userId]
+      );
+      
+      if (!users.length || !users[0].is_active) {
+        return res.status(401).json({ error: "User not found or inactive" });
+      }
+      
+      res.json({
+        valid: true,
+        user: {
+          id: users[0].id,
+          email: users[0].email,
+          name: `${users[0].first_name} ${users[0].last_name}`,
+          role: users[0].role
+        }
+      });
+    } catch (error) {
+      if (error.name === "JsonWebTokenError") {
+        return res.status(401).json({ error: "Invalid token" });
+      }
+      console.error("Token validation error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  };
+
+async authorize(req, res) {
+  try {
+    const { client_id, redirect_uri, response_type, state, scope } = req.query;
+    
+    // Validate required parameters
+    if (!client_id || !redirect_uri || response_type !== "code") {
+      return res.status(400).json({ error: "Invalid request parameters" });
+    }
+    
+    // Validate OAuth client
+    const [client] = await pool.execute(
+      "SELECT * FROM oauth_clients WHERE client_id = ?",
+      [client_id]
+    );
+    
+    if (!client.length) {
+      return res.status(400).json({ error: "Invalid client_id" });
+    }
+    
+    // Validate redirect_uri
+    const validRedirectUris = client[0].redirect_uri.split(",");
+    if (!validRedirectUris.some(uri => uri.trim() === redirect_uri)) {
+      return res.status(400).json({ error: "Invalid redirect_uri" });
+    }
+    
+    // Check if user is already authenticated
+    const authToken = req.cookies.accessToken || req.headers.authorization?.split(" ")[1];
+    
+    if (authToken) {
+      try {
+        const decoded = jwt.verify(authToken, process.env.JWT_SECRET);
+        const [user] = await pool.execute(
+          "SELECT id FROM users WHERE id = ? AND is_active = 1",
+          [decoded.userId]
+        );
+        
+        if (user.length) {
+          // User is authenticated, generate code immediately
+          const crypto = require("crypto");
+          const code = crypto.randomBytes(32).toString("hex");
+          const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+          
+          await pool.execute(
+            "INSERT INTO authorization_codes (code, user_id, client_id, redirect_uri, scope, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+            [code, decoded.userId, client_id, redirect_uri, scope || " ", expiresAt]
+          );
+          
+          const redirectUrl = new URL(redirect_uri);
+          redirectUrl.searchParams.append("code", code);
+          if (state) redirectUrl.searchParams.append("state", state);
+          
+          return res.redirect(redirectUrl.toString());
+        }
+      } catch (error) {
+        // Token invalid, proceed to login
+      }
+    }
+    
+    // Store OAuth request in session and redirect to login
+    req.session.oauthRequest = { client_id, redirect_uri, state, scope };
+    
+    // Redirect to login page with OAuth indicator
+    res.redirect(`/login?oauth=true&client=${encodeURIComponent(client[0].name)}`);
+  } catch (error) {
+    console.error("Authorization error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+// Token Exchange Endpoint
+async token(req, res) {
+  try {
+    const { grant_type, code, client_id, client_secret, redirect_uri, refresh_token } = req.body;
+    
+    // Handle authorization code grant
+    if (grant_type === "authorization_code") {
+      // Validate client credentials
+      const [client] = await pool.execute(
+        "SELECT * FROM oauth_clients WHERE client_id = ? AND client_secret = ?",
+        [client_id, client_secret]
+      );
+      
+      if (!client.length) {
+        return res.status(401).json({ error: "invalid_client" });
+      }
+      
+      // Validate authorization code
+      const [authCode] = await pool.execute(
+        "SELECT * FROM authorization_codes WHERE code = ? AND client_id = ? AND redirect_uri = ? AND expires_at > NOW() AND used = 0",
+        [code, client_id, redirect_uri]
+      );
+      
+      if (!authCode.length) {
+        return res.status(400).json({ error: "invalid_grant" });
+      }
+      
+      // Mark code as used
+      await pool.execute(
+        "UPDATE authorization_codes SET used = 1 WHERE code = ?",
+        [code]
+      );
+      
+      // Get user data
+      const [user] = await pool.execute(
+        "SELECT id, email, first_name, last_name, role, is_verified FROM users WHERE id = ?",
+        [authCode[0].user_id]
+      );
+      
+      if (!user.length) {
+        return res.status(400).json({ error: "invalid_grant" });
+      }
+      
+      // Generate tokens
+      const accessToken = jwt.sign(
+        { 
+          userId: user[0].id, 
+          email: user[0].email, 
+          role: user[0].role,
+          client_id: client_id 
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+      
+      const refreshToken = await Token.createRefreshToken(user[0].id, client_id);
+      
+      // Set cookies if requested
+      if (req.body.setCookies) {
+        res.cookie("accessToken", accessToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          domain: req.body.cookieDomain || undefined,
+          maxAge: 60 * 60 * 1000 // 1 hour
+        });
+        
+        res.cookie("refreshToken", refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          domain: req.body.cookieDomain || undefined,
+          maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+        });
+      }
+      
+      return res.json({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        token_type: "Bearer",
+        expires_in: 3600,
+        scope: authCode[0].scope || " ",
+        user: {
+          id: user[0].id,
+          email: user[0].email,
+          firstName: user[0].first_name,
+          lastName: user[0].last_name,
+          role: user[0].role,
+          isVerified: user[0].is_verified
+        }
+      });
+    }
+    
+    // Handle refresh token grant
+    if (grant_type === "refresh_token") {
+      // Implementation for refresh token...
+      // Similar to your existing refreshToken method
+    }
+    
+    return res.status(400).json({ error: "unsupported_grant_type" });
+  } catch (error) {
+    console.error("Token exchange error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+// Introspection endpoint (to validate tokens)
+async introspect(req, res) {
+  try {
+    const { token, token_type_hint } = req.body;
+    const authHeader = req.headers.authorization;
+    
+    // Validate client credentials (Basic auth)
+    if (!authHeader || !authHeader.startsWith("Basic ")) {
+      return res.status(401).json({ error: "Invalid client authentication" });
+    }
+    
+    const credentials = Buffer.from(authHeader.slice(6), "base64").toString();
+    const [client_id, client_secret] = credentials.split(":");
+    
+    const [client] = await pool.execute(
+      "SELECT * FROM oauth_clients WHERE client_id = ? AND client_secret = ?",
+      [client_id, client_secret]
+    );
+    
+    if (!client.length) {
+      return res.status(401).json({ error: "Invalid client credentials" });
+    }
+    
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Verify token belongs to this client
+      if (decoded.client_id && decoded.client_id !== client_id) {
+        return res.json({ active: false });
+      }
+      
+      const [user] = await pool.execute(
+        "SELECT id, email, role, is_active FROM users WHERE id = ?",
+        [decoded.userId]
+      );
+      
+      if (!user.length || !user[0].is_active) {
+        return res.json({ active: false });
+      }
+      
+      res.json({
+        active: true,
+        scope: decoded.scope || " ",
+        client_id: decoded.client_id || client_id,
+        username: user[0].email,
+        exp: decoded.exp,
+        iat: decoded.iat,
+        sub: decoded.userId.toString(),
+        aud: client_id,
+        role: user[0].role
+      });
+    } catch (error) {
+      res.json({ active: false });
+    }
+  } catch (error) {
+    console.error("Introspection error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
   async register(req, res) {
     try {
       const { email, password, firstName, lastName } = req.body;
@@ -39,7 +506,7 @@ class AuthController {
       const { email, password } = req.body;
       const ipAddress = req.ip || req.connection.remoteAddress;
       const userAgent = req.get("User-Agent");
-
+  
       // Find user
       const user = await User.findByEmail(email);
       
@@ -48,11 +515,11 @@ class AuthController {
         "INSERT INTO login_attempts (email, ip_address, user_agent, success) VALUES (?, ?, ?, ?)",
         [email, ipAddress, userAgent, false]
       );
-
+  
       if (!user) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
-
+  
       // Check if account is locked
       if (user.locked_until && new Date() < new Date(user.locked_until)) {
         return res.status(423).json({ 
@@ -60,7 +527,7 @@ class AuthController {
           lockedUntil: user.locked_until
         });
       }
-
+  
       // Verify password
       const isValidPassword = await User.comparePassword(password, user.password);
       if (!isValidPassword) {
@@ -75,11 +542,10 @@ class AuthController {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      // Check if user is active
       if (!user.is_active) {
         return res.status(401).json({ message: "Account is deactivated" });
       }
-
+  
       // Successful login
       await User.resetFailedAttempts(user.id);
       await User.updateLastLogin(user.id);
@@ -89,20 +555,86 @@ class AuthController {
         "UPDATE login_attempts SET success = TRUE WHERE email = ? AND ip_address = ? ORDER BY attempted_at DESC LIMIT 1",
         [email, ipAddress]
       );
-
-      // Generate tokens
+  
+      // Check if this is an OAuth flow (from session or query params)
+      const oauthRequest = req.session?.oauthRequest || req.body.oauthRequest;
+      
+      if (oauthRequest) {
+        const { client_id, redirect_uri, state, scope } = oauthRequest;
+        
+        // Validate OAuth client
+        const [client] = await pool.execute(
+          "SELECT * FROM oauth_clients WHERE client_id = ? AND redirect_uri LIKE ?",
+          [client_id, `%${redirect_uri}%`]
+        );
+        
+        if (!client.length) {
+          return res.status(400).json({ error: "Invalid OAuth client" });
+        }
+        
+        // Generate authorization code
+        const crypto = require("crypto");
+        const code = crypto.randomBytes(32).toString("hex");
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        
+        // Store authorization code
+        await pool.execute(
+          "INSERT INTO authorization_codes (code, user_id, client_id, redirect_uri, scope, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+          [code, user.id, client_id, redirect_uri, scope || " ", expiresAt]
+        );
+        
+        // Clear OAuth request from session
+        if (req.session?.oauthRequest) {
+          delete req.session.oauthRequest;
+        }
+        
+        // Send login alert
+        if (process.env.NODE_ENV === "production") {
+          await emailService.sendLoginAlert(user.email, user.first_name, ipAddress, userAgent);
+        }
+        
+        // Return redirect URL instead of tokens
+        const redirectUrl = new URL(redirect_uri);
+        redirectUrl.searchParams.append("code", code);
+        if (state) redirectUrl.searchParams.append("state", state);
+        
+        return res.json({ 
+          message: "Login successful",
+          oauth: true,
+          redirectUrl: redirectUrl.toString()
+        });
+      }
+  
+      // Normal login flow - Generate tokens
       const accessToken = jwt.sign(
         { userId: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn: "15m" }
       );
-
+  
       const refreshToken = await Token.createRefreshToken(user.id);
-
+  
+      // Set cookies if requested
+      if (req.body.setCookies || req.query.setCookies) {
+        res.cookie("accessToken", accessToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          maxAge: 15 * 60 * 1000 // 15 minutes
+        });
+  
+        res.cookie("refreshToken", refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+        });
+      }
+  
       if (process.env.NODE_ENV === "production") {
         await emailService.sendLoginAlert(user.email, user.first_name, ipAddress, userAgent);
       }
-
+  
       res.json({
         message: "Login successful",
         accessToken,

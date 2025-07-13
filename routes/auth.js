@@ -5,6 +5,30 @@ const { authenticateToken, requireEmailVerification, requireRole } = require("..
 const { authLimiter, passwordResetLimiter } = require("../middleware/rateLimiter");
 const { validateRegistration, validateLogin, validatePasswordReset } = require("../middleware/validation");
 const { pool } = require("../config/database");
+const cors = require("cors");
+const jwt = require("jsonwebtoken");
+
+// In your auth service
+router.use(cors({
+  origin: ["http://localhost:3001", "https://your-client-app.com"],
+  credentials: true, // Allow cookies
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+// Cookie settings for cross-domain
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // "none" for cross-site in production
+  domain: ".yourdomain.com", // Set to parent domain for subdomain sharing
+  maxAge: 60 * 60 * 1000
+};
+
+
+router.get("/authorize", authController.generateAuthCode);
+router.post("/token", authController.token);
+router.post("/introspect", authController.introspect);  // Token validation endpoint
 
 // Public routes
 router.post("/register", authLimiter, validateRegistration, authController.register); // yes
