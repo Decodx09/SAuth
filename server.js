@@ -3,6 +3,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const token = require("./models/Token");
 
 const { initDatabase } = require("./config/database");
 const authRoutes = require("./routes/auth");
@@ -70,11 +71,11 @@ app.post("/api/auth/refresh", async (req, res) => {
   }
 });
 
-// // When a user logs in successfully...
-// res.cookie('refreshToken', newRefreshToken, {
+// When a user logs in successfully...
+// app.cookie("refreshToken", token.createRefreshToken, {
 //   httpOnly: true,                 // Cannot be accessed by JS
 //   secure: true,                   // Only sent over HTTPS
-//   sameSite: 'strict',             // Mitigates CSRF attacks
+//   sameSite: "strict",             // Mitigates CSRF attacks
 //   maxAge: 30 * 24 * 60 * 60 * 1000  // 30 days
 // });
 

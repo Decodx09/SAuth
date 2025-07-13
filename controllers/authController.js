@@ -183,9 +183,9 @@ class AuthController {
   async logoutAllUsers(req, res) {
     try {
       const { userId } = req.body;
-      // if( !req.user.role === 'admin' ) {
-      //   return res.status(403).json({ message: 'Forbidden: Admin access required' });
-      // }
+      if( !req.user.role === "admin" ) {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
       await Token.emergencyrevoketokens();
       res.json({ message: "Logged out from all devices successfully" });
     } catch (error) {
