@@ -1,14 +1,14 @@
 # SAuth Summary
 
-# 🔐 Authentication & User Management API
+# Authentication & User Management API
 
 A **secure**, **feature-rich**, and **scalable** RESTful API built to handle user authentication, authorization, and account management with a focus on best practices like token security, validation, and role-based access control.
 
 ---
 
-## ✨ Features Overview
+## Features Overview
 
-### 🔑 Authentication
+### Authentication
 
 * **User Registration** (`/register`)
   Input validation, rate limiting, and email capture for secure onboarding.
@@ -24,7 +24,7 @@ A **secure**, **feature-rich**, and **scalable** RESTful API built to handle use
 
 ---
 
-### 🛠️ Account Recovery
+### Account Recovery
 
 * **Forgot Password** (`/forgot-password`)
   Secure endpoint to trigger password reset flow.
@@ -34,7 +34,7 @@ A **secure**, **feature-rich**, and **scalable** RESTful API built to handle use
 
 ---
 
-### 👤 User Account Management *(Authenticated)*
+### User Account Management *(Authenticated)*
 
 * **Logout (Single Session)** (`/logout`)
   Invalidate the current device’s session.
@@ -56,7 +56,7 @@ A **secure**, **feature-rich**, and **scalable** RESTful API built to handle use
 
 ---
 
-### 🛡️ Admin Functionality *(Role: Admin)*
+### Admin Functionality *(Role: Admin)*
 
 * **Force Logout All Users** (`/logout-all-users`)
   Immediately revoke access for all active sessions across the platform.
