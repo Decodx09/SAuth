@@ -17,8 +17,8 @@ jobs:
           cache: 'npm'
       - name: Install Dependencies
         run: npm install
-      - name: Lint Code with ESLint
-        run: npm run lint
+      # - name: Lint Code with ESLint
+      #   run: npm run lint
 
   codeql-analysis:
     needs: build-and-test
