@@ -75,7 +75,7 @@ jobs:
       steps:
         - id: set-matrix
           run: |
-            echo 'hosts=["ec2-3-15-13-157.us-east-2.compute.amazonaws.com","ec2-18-216-244-144.us-east-2.compute.amazonaws.com"]' >> $GITHUB_OUTPUT
+            echo 'hosts=["ec2-3-137-192-121.us-east-2.compute.amazonaws.com"]' >> $GITHUB_OUTPUT
       
   deploy:
       needs: [codeql-analysis, build-and-scan-docker-image, prepare-matrix]
