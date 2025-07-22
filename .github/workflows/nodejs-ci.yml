@@ -89,6 +89,9 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             set -e
+            
+            echo "Starting deployment on EC2 instance..."
+            sudo usermod -aG docker ${{ secrets.EC2_USERNAME }} || true
 
             echo "Logging into GitHub Container Registry on the server..."
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
