@@ -17,6 +17,8 @@ jobs:
           cache: 'npm'
       - name: Install Dependencies
         run: npm install
+      - name: Lint Code with ESLint
+        run: npm run lint
 
   codeql-analysis:
     needs: build-and-test
@@ -37,7 +39,7 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
     outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
+      image_tag: ${{ steps.meta.outputs.tags }}  
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -72,17 +74,14 @@ jobs:
     steps:
       - id: set-matrix
         run: |
-          echo "hosts<<EOF" >> $GITHUB_OUTPUT
-          echo "${{ secrets.EC2_HOST }}" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "hosts=[\"${{ secrets.EC2_HOST }}\"]" >> $GITHUB_OUTPUT 
   
   deploy:
-    needs: [build-and-scan-docker-image, prepare-matrix]
+    needs: [codeql-analysis, build-and-scan-docker-image, prepare-matrix] 
     runs-on: ubuntu-latest
     strategy:
       matrix:
         host: ${{ fromJSON(needs.prepare-matrix.outputs.hosts) }}
-
     steps:
       - name: Deploy to EC2 Instance
         uses: appleboy/ssh-action@v1.0.3
@@ -92,15 +91,14 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             set -e
-            # This command is for initial setup; harmless to run again.
             sudo usermod -aG docker ${{ secrets.EC2_USERNAME }} || true
             
             echo "Logging into GitHub Container Registry on the server..."
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
+            
             echo "Pulling the latest image from the registry..."
             docker pull ${{ needs.build-and-scan-docker-image.outputs.image_tag }}
-
+            
             echo "Stopping and removing the old container..."
             docker stop my-app || true
             docker rm my-app || true
