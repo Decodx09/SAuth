@@ -1,4 +1,4 @@
-name: SAuth CI/CD Pipeline made by shivansh sukhija
+name: SAuth
 
 on:
   push:
@@ -17,8 +17,6 @@ jobs:
           cache: 'npm'
       - name: Install Dependencies
         run: npm install
-      # - name: Lint Code with ESLint
-      #   run: npm run lint
 
   codeql-analysis:
     needs: build-and-test
@@ -39,7 +37,7 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
     outputs:
-      image_tag: ghcr.io/decodx09/sauth:${{ github.sha }}
+      image_tag: ${{ steps.meta.outputs.version }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -55,7 +53,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/decodx09/sauth
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=sha,format=short
             type=raw,value=latest,enable=true
@@ -74,26 +72,26 @@ jobs:
     steps:
       - id: set-matrix
         run: |
-          # Define your servers here - replace with your actual server hostnames
-          echo 'matrix={
+          echo "matrix<<EOF" >> $GITHUB_OUTPUT
+          echo '{
             "include": [
               {
-                "host": "ec2-3-137-192-121.us-east-2.compute.amazonaws.com",
+                "host": "${{ secrets.EC2_HOST }}",
                 "name": "production-1"
               },
               {
-                "host": "ec2-13-58-250-41.us-east-2.compute.amazonaws.com", 
+                "host": "${{ secrets.EC2_HOST2 }}",
                 "name": "production-2"
               }
             ]
           }' >> $GITHUB_OUTPUT
-
+  
   deploy:
     needs: [codeql-analysis, build-and-scan-docker-image, prepare-matrix]
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
-      fail-fast: false  # Continue deploying to other servers even if one fails
+      fail-fast: false
     steps:
       - name: Deploy to ${{ matrix.name }}
         uses: appleboy/ssh-action@v1.0.3
@@ -103,27 +101,28 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             set -e
+            IMAGE_TO_DEPLOY="${{ needs.build-and-scan-docker-image.outputs.image_tag }}"
             sudo usermod -aG docker ${{ secrets.EC2_USERNAME }} || true
             
             echo "Deploying to ${{ matrix.name }} (${{ matrix.host }})"
             echo "Logging into GitHub Container Registry on the server..."
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
-            echo "Pulling the latest image from the registry..."
-            docker pull ghcr.io/decodx09/sauth:latest
+            echo "Pulling image: ${IMAGE_TO_DEPLOY}"
+            docker pull ${IMAGE_TO_DEPLOY}
             
             echo "Stopping and removing the old container..."
             docker stop my-app || true
             docker rm my-app || true
             
             echo "Starting the new container..."
-            docker run -d -p 3000:3000 --name my-app --restart always ghcr.io/decodx09/sauth:latest
+            docker run -d -p 3000:3000 --name my-app --restart always ${IMAGE_TO_DEPLOY}
             
             echo "Deployment complete on ${{ matrix.name }}. App accessible at http://${{ matrix.host }}:3000"
 
   auto-rollback:
     needs: [deploy]
-    if: failure() && contains(needs.deploy.result, 'failure')
+    if: failure()
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
@@ -136,12 +135,11 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             set -e
-            
             echo "Deployment failed on ${{ matrix.name }} - initiating automatic rollback..."
+            # NOTE: This rollback logic is not robust. It assumes the second-to-last image is the correct one.
+            # A manual rollback to a known-good tag is a much safer production strategy.
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # Get the second-latest image (previous working version)
-            PREVIOUS_IMAGE=$(docker images ghcr.io/decodx09/sauth --format "{{.Repository}}:{{.Tag}}" | grep -E "sha-[a-f0-9]{7}" | head -n 2 | tail -n 1)
+            PREVIOUS_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" ${{ github.repository }} | grep -v "latest" | head -n 2 | tail -n 1)
             
             if [ -n "$PREVIOUS_IMAGE" ]; then
               echo "Rolling back ${{ matrix.name }} to: $PREVIOUS_IMAGE"
@@ -151,4 +149,5 @@ jobs:
               echo "Automatic rollback complete on ${{ matrix.name }}"
             else
               echo "No previous image found for rollback on ${{ matrix.name }}"
+              exit 1
             fi
