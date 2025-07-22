@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Previous image tag to rollback to (e.g., ghcr.io/your-repo:sha12345)'
+        description: 'RollBack'
         required: true
 
 jobs:
@@ -19,18 +19,20 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             set -e
+            # Construct the full image name using the tag provided by the user
+            IMAGE_NAME="ghcr.io/${{ github.repository }}:${{ github.event.inputs.image_tag }}"
 
             echo "Logging into GitHub Container Registry..."
-            echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            echo "Pulling the specified image..."
-            docker pull ${{ inputs.image_tag }}
+            echo "Pulling the specified image: ${IMAGE_NAME}"
+            sudo docker pull ${IMAGE_NAME}
 
             echo "Stopping and removing the current container..."
-            docker stop my-app || true
-            docker rm my-app || true
+            sudo docker stop my-app || true
+            sudo docker rm my-app || true
 
             echo "Starting the container with the rollback image..."
-            docker run -d -p 3000:3000 --name my-app --restart always ${{ inputs.image_tag }}
+            sudo docker run -d -p 3000:3000 --name my-app --restart always ${IMAGE_NAME}
 
-            echo "Rollback complete. App accessible at http://${{ secrets.EC2_HOST }}:3000"
+            echo "Rollback to tag ${{ github.event.inputs.image_tag }} complete."
