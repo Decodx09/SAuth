@@ -89,7 +89,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             set -e
-            
+
             echo "Starting deployment on EC2 instance..."
             sudo usermod -aG docker ${{ secrets.EC2_USERNAME }} || true
 
@@ -106,4 +106,4 @@ jobs:
             echo "Starting the new container..."
             docker run -d -p 3000:3000 --name my-app --restart always ${{ needs.build-and-scan-docker-image.outputs.image_tag }}
 
-            echo "Deployment complete. App accessible at http://${{ secrets.EC2_HOST }}:3000"
+            echo "Deployment complete lmao fucking asshole. App accessible at http://${{ secrets.EC2_HOST }}:3000"
