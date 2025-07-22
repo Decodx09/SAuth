@@ -65,22 +65,22 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # This new job reads the secret and prepares the matrix for the deploy job
   prepare-matrix:
     runs-on: ubuntu-latest
     outputs:
       hosts: ${{ steps.set-matrix.outputs.hosts }}
     steps:
       - id: set-matrix
-        run: echo "hosts=${{ secrets.EC2_HOST }}" >> $GITHUB_OUTPUT
+        run: |
+          echo "hosts<<EOF" >> $GITHUB_OUTPUT
+          echo "${{ secrets.EC2_HOST }}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
   
   deploy:
-    # This job now depends on the new 'prepare-matrix' job
     needs: [build-and-scan-docker-image, prepare-matrix]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # The matrix now gets its list from the output of the 'prepare-matrix' job
         host: ${{ fromJSON(needs.prepare-matrix.outputs.hosts) }}
 
     steps:
