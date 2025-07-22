@@ -85,6 +85,7 @@ jobs:
               }
             ]
           }' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
   
   deploy:
     needs: [codeql-analysis, build-and-scan-docker-image, prepare-matrix]
@@ -136,8 +137,6 @@ jobs:
           script: |
             set -e
             echo "Deployment failed on ${{ matrix.name }} - initiating automatic rollback..."
-            # NOTE: This rollback logic is not robust. It assumes the second-to-last image is the correct one.
-            # A manual rollback to a known-good tag is a much safer production strategy.
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             PREVIOUS_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" ${{ github.repository }} | grep -v "latest" | head -n 2 | tail -n 1)
             
