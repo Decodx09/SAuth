@@ -83,13 +83,43 @@ jobs:
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             echo "Pulling the latest image from the registry..."
-            docker pull ghcr.io/${{ github.repository }}:latest
+            docker pull ghcr.io/decodx09/sauth:latest
             
             echo "Stopping and removing the old container..."
             docker stop my-app || true
             docker rm my-app || true
             
             echo "Starting the new container..."
-            docker run -d -p 3000:3000 --name my-app --restart always ghcr.io/${{ github.repository }}:latest
+            docker run -d -p 3000:3000 --name my-app --restart always ghcr.io/decodx09/sauth:latest
             
             echo "Deployment complete. App accessible at http://${{ secrets.EC2_HOST }}:3000"
+
+  auto-rollback:
+    needs: [deploy]
+    if: failure() && needs.deploy.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Automatic Rollback on Deployment Failure
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            
+            echo "Deployment failed - initiating automatic rollback..."
+            echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Get the previous working image (you may need to track this differently)
+            PREVIOUS_IMAGE=$(docker images ghcr.io/decodx09/sauth --format "table {{.Repository}}:{{.Tag}}" | grep -v latest | head -n 1 | tr -d ' ')
+            
+            if [ -n "$PREVIOUS_IMAGE" ]; then
+              echo "Rolling back to: $PREVIOUS_IMAGE"
+              docker stop my-app || true
+              docker rm my-app || true
+              docker run -d -p 3000:3000 --name my-app --restart always $PREVIOUS_IMAGE
+              echo "Automatic rollback complete to $PREVIOUS_IMAGE"
+            else
+              echo "No previous image found for rollback"
+            fi
