@@ -81,7 +81,7 @@ jobs:
     needs: [codeql-analysis, build-and-scan-docker-image]
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to EC2 by running Docker container
+      - name: Deploy to EC2 by running Docker containers
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
