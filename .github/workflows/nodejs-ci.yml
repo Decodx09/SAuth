@@ -1,4 +1,3 @@
-
 name: SAuth CI/CD Pipeline
 
 on:
@@ -74,7 +73,7 @@ jobs:
       - id: set-matrix
         run: |
           echo "hosts<<EOF" >> $GITHUB_OUTPUT
-          echo "${{ secrets.EC2_HOST }}" >> $GITHUB_OUTPUT
+          echo "${{ vars.EC2_HOST }}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
   
   deploy:
