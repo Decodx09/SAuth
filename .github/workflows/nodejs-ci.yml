@@ -17,8 +17,8 @@ jobs:
           cache: 'npm'
       - name: Install Dependencies
         run: npm install
-      # - name: Lint Code with ESLint
-      #   run: npm run lint
+      - name: Lint Code with ESLint
+        run: npm run lint
 
   codeql-analysis:
     needs: build-and-test
@@ -38,6 +38,8 @@ jobs:
   build-and-scan-docker-image:
     needs: build-and-test
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ghcr.io/decodx09/sauth:${{ github.sha }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -53,7 +55,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/decodx09/sauth
           tags: |
             type=sha,format=short
             type=raw,value=latest,enable=true
@@ -65,20 +67,45 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  deploy:
-    needs: [codeql-analysis, build-and-scan-docker-image]
+  prepare-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Deploy to EC2 Instance
+      - id: set-matrix
+        run: |
+          # Define your servers here - replace with your actual server hostnames
+          echo 'matrix={
+            "include": [
+              {
+                "host": "ec2-3-137-192-121.us-east-2.compute.amazonaws.com",
+                "name": "production-1"
+              },
+              {
+                "host": "ec2-13-58-250-41.us-east-2.compute.amazonaws.com", 
+                "name": "production-2"
+              }
+            ]
+          }' >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: [codeql-analysis, build-and-scan-docker-image, prepare-matrix]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
+      fail-fast: false  # Continue deploying to other servers even if one fails
+    steps:
+      - name: Deploy to ${{ matrix.name }}
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ matrix.host }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             set -e
             sudo usermod -aG docker ${{ secrets.EC2_USERNAME }} || true
             
+            echo "Deploying to ${{ matrix.name }} (${{ matrix.host }})"
             echo "Logging into GitHub Container Registry on the server..."
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
@@ -92,34 +119,36 @@ jobs:
             echo "Starting the new container..."
             docker run -d -p 3000:3000 --name my-app --restart always ghcr.io/decodx09/sauth:latest
             
-            echo "Deployment complete. App accessible at http://${{ secrets.EC2_HOST }}:3000"
+            echo "Deployment complete on ${{ matrix.name }}. App accessible at http://${{ matrix.host }}:3000"
 
   auto-rollback:
     needs: [deploy]
-    if: failure() && needs.deploy.result == 'failure'
+    if: failure() && contains(needs.deploy.result, 'failure')
     runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     steps:
-      - name: Automatic Rollback on Deployment Failure
+      - name: Automatic Rollback on ${{ matrix.name }}
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ matrix.host }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             set -e
             
-            echo "Deployment failed - initiating automatic rollback..."
+            echo "Deployment failed on ${{ matrix.name }} - initiating automatic rollback..."
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
-            # Get the previous working image (you may need to track this differently)
-            PREVIOUS_IMAGE=$(docker images ghcr.io/decodx09/sauth --format "table {{.Repository}}:{{.Tag}}" | grep -v latest | head -n 1 | tr -d ' ')
+            # Get the second-latest image (previous working version)
+            PREVIOUS_IMAGE=$(docker images ghcr.io/decodx09/sauth --format "{{.Repository}}:{{.Tag}}" | grep -E "sha-[a-f0-9]{7}" | head -n 2 | tail -n 1)
             
             if [ -n "$PREVIOUS_IMAGE" ]; then
-              echo "Rolling back to: $PREVIOUS_IMAGE"
+              echo "Rolling back ${{ matrix.name }} to: $PREVIOUS_IMAGE"
               docker stop my-app || true
               docker rm my-app || true
               docker run -d -p 3000:3000 --name my-app --restart always $PREVIOUS_IMAGE
-              echo "Automatic rollback complete to $PREVIOUS_IMAGE"
+              echo "Automatic rollback complete on ${{ matrix.name }}"
             else
-              echo "No previous image found for rollback"
+              echo "No previous image found for rollback on ${{ matrix.name }}"
             fi

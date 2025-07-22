@@ -1,38 +1,91 @@
-name: Manual Rollback
+name: Manual Rollback (Multi-Server)
 
 on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'RollBack'
+        description: 'Image tag to rollback'
         required: true
+        default: 'ghcr.io/decodx09/sauth:latest'
+      target_servers:
+        description: 'Deploy to servers (all, production-1, production-2)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - production-1
+          - production-2
 
 jobs:
-  rollback:
+  prepare-rollback-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Rollback Deployment on EC2
+      - id: set-matrix
+        run: |
+          if [ "${{ inputs.target_servers }}" == "all" ]; then
+            echo 'matrix={
+              "include": [
+                {
+                  "host": "ec2-3-15-13-157.us-east-2.compute.amazonaws.com",
+                  "name": "production-1"
+                },
+                {
+                  "host": "ec2-18-216-244-144.us-east-2.compute.amazonaws.com", 
+                  "name": "production-2"
+                }
+              ]
+            }' >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.target_servers }}" == "production-1" ]; then
+            echo 'matrix={
+              "include": [
+                {
+                  "host": "ec2-3-15-13-157.us-east-2.compute.amazonaws.com",
+                  "name": "production-1"
+                }
+              ]
+            }' >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.target_servers }}" == "production-2" ]; then
+            echo 'matrix={
+              "include": [
+                {
+                  "host": "ec2-18-216-244-144.us-east-2.compute.amazonaws.com",
+                  "name": "production-2"
+                }
+              ]
+            }' >> $GITHUB_OUTPUT
+          fi
+
+  rollback:
+    needs: [prepare-rollback-matrix]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare-rollback-matrix.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - name: Rollback ${{ matrix.name }} to Previous Version
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ matrix.host }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             set -e
-            # Construct the full image name using the tag provided by the user
-            IMAGE_NAME="ghcr.io/${{ github.repository }}:${{ github.event.inputs.image_tag }}"
 
+            echo "Starting rollback on ${{ matrix.name }} (${{ matrix.host }})"
             echo "Logging into GitHub Container Registry..."
-            sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            echo "Pulling the specified image: ${IMAGE_NAME}"
-            sudo docker pull ${IMAGE_NAME}
+            echo "Pulling rollback image: ${{ inputs.image_tag }}"
+            docker pull ${{ inputs.image_tag }}
 
-            echo "Stopping and removing the current container..."
-            sudo docker stop my-app || true
-            sudo docker rm my-app || true
+            echo "Stopping and removing current container on ${{ matrix.name }}..."
+            docker stop my-app || true
+            docker rm my-app || true
 
-            echo "Starting the container with the rollback image..."
-            sudo docker run -d -p 3000:3000 --name my-app --restart always ${IMAGE_NAME}
+            echo "Starting container with rollback image on ${{ matrix.name }}..."
+            docker run -d -p 3000:3000 --name my-app --restart always ${{ inputs.image_tag }}
 
-            echo "Rollback to tag ${{ github.event.inputs.image_tag }} complete."
+            echo "Rollback complete on ${{ matrix.name }}. App accessible at http://${{ matrix.host }}:3000"
