@@ -23,9 +23,6 @@ jobs:
       - name: Lint Code with ESLint
         run: npm run lint
 
-      # - name: Run Tests
-      #   run: npm test
-
   codeql-analysis:
     needs: build-and-test
     runs-on: ubuntu-latest
@@ -83,28 +80,27 @@ jobs:
   deploy:
     needs: [codeql-analysis, build-and-scan-docker-image]
     runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2 by running Docker container
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
 
-    # steps:
-    #   - name: Deploy to EC2 by running Docker container
-    #     uses: appleboy/ssh-action@v1.0.3
-    #     with:
-    #       host: ${{ secrets.EC2_HOST }}
-    #       username: ${{ secrets.EC2_USERNAME }}
-    #       key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-    #       script: |
-    #         set -e
+            echo "Logging into GitHub Container Registry on the server..."
+            echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-    #         echo "Logging into GitHub Container Registry on the server..."
-    #         echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "Pulling the latest image from the registry..."
+            docker pull ${{ needs.build-and-scan-docker-image.outputs.image_tag }}
 
-    #         echo "Pulling the latest image from the registry..."
-    #         docker pull ${{ needs.build-and-scan-docker-image.outputs.image_tag }}
+            echo "Stopping and removing the old container..."
+            docker stop my-app || true
+            docker rm my-app || true
 
-    #         echo "Stopping and removing the old container..."
-    #         docker stop my-app || true
-    #         docker rm my-app || true
+            echo "Starting the new container..."
+            docker run -d -p 3000:3000 --name my-app --restart always ${{ needs.build-and-scan-docker-image.outputs.image_tag }}
 
-    #         echo "Starting the new container..."
-    #         docker run -d -p 3000:3000 --name my-app --restart always ${{ needs.build-and-scan-docker-image.outputs.image_tag }}
-
-    #         echo "Fuck you all, you can now access the app at http://${{ secrets.EC2_HOST }}:3000"
+            echo "Deployment complete. App accessible at http://${{ secrets.EC2_HOST }}:3000"

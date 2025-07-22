@@ -5,16 +5,16 @@ const jwt = require("jsonwebtoken");
 const { pool } = require("../config/database");
 const crypto = require("crypto");
 
-const generateAccessToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
-};
+// const generateAccessToken = (userId) => {
+//   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
+// };
 
 class AuthController {
 
   async generateAuthCode(req, res){
     try {
-      const { client_id, redirect_uri, state, response_type } = req.query;
-      
+      const { client_id, redirect_uri, state } = req.query;
+      // const { client_id, redirect_uri, state, response_type } = req.query;`
       // Validate client application
       const [client] = await pool.execute(
         "SELECT * FROM oauth_clients WHERE client_id = ? AND redirect_uri = ?",
@@ -166,7 +166,8 @@ async authorize(req, res) {
 // Token Exchange Endpoint
 async token(req, res) {
   try {
-    const { grant_type, code, client_id, client_secret, redirect_uri, refresh_token } = req.body;
+    const { grant_type, code, client_id, client_secret, redirect_uri } = req.body;
+    // const { grant_type, code, client_id, client_secret, redirect_uri, refresh_token } = req.body;
     
     // Handle authorization code grant
     if (grant_type === "authorization_code") {
