@@ -1,4 +1,4 @@
-name: SAuth
+name: SAuth CI/CD Pipeline
 
 on:
   push:
@@ -65,36 +65,19 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  prepare-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - id: set-matrix
-        run: |
-          echo "matrix<<EOF" >> $GITHUB_OUTPUT
-          echo '{
-            "include": [
-              {
-                "host": "${{ secrets.EC2_HOST }}",
-                "name": "production-1"
-              },
-              {
-                "host": "${{ secrets.EC2_HOST2 }}",
-                "name": "production-2"
-              }
-            ]
-          }' >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-  
   deploy:
-    needs: [codeql-analysis, build-and-scan-docker-image, prepare-matrix]
+    # The 'prepare-matrix' job is no longer needed
+    needs: [codeql-analysis, build-and-scan-docker-image]
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
+      matrix:
+        # The server list is now hardcoded here for testing
+        host:
+          - "ec2-3-137-192-121.us-east-2.compute.amazonaws.com"
+          - "ec2-13-58-250-41.us-east-2.compute.amazonaws.com"
       fail-fast: false
     steps:
-      - name: Deploy to ${{ matrix.name }}
+      - name: Deploy to ${{ matrix.host }}
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ matrix.host }}
@@ -105,7 +88,7 @@ jobs:
             IMAGE_TO_DEPLOY="${{ needs.build-and-scan-docker-image.outputs.image_tag }}"
             sudo usermod -aG docker ${{ secrets.EC2_USERNAME }} || true
             
-            echo "Deploying to ${{ matrix.name }} (${{ matrix.host }})"
+            echo "Deploying to ${{ matrix.host }}"
             echo "Logging into GitHub Container Registry on the server..."
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
@@ -119,34 +102,4 @@ jobs:
             echo "Starting the new container..."
             docker run -d -p 3000:3000 --name my-app --restart always ${IMAGE_TO_DEPLOY}
             
-            echo "Deployment complete on ${{ matrix.name }}. App accessible at http://${{ matrix.host }}:3000"
-
-  auto-rollback:
-    needs: [deploy]
-    if: failure()
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
-    steps:
-      - name: Automatic Rollback on ${{ matrix.name }}
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ matrix.host }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          script: |
-            set -e
-            echo "Deployment failed on ${{ matrix.name }} - initiating automatic rollback..."
-            echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            PREVIOUS_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" ${{ github.repository }} | grep -v "latest" | head -n 2 | tail -n 1)
-            
-            if [ -n "$PREVIOUS_IMAGE" ]; then
-              echo "Rolling back ${{ matrix.name }} to: $PREVIOUS_IMAGE"
-              docker stop my-app || true
-              docker rm my-app || true
-              docker run -d -p 3000:3000 --name my-app --restart always $PREVIOUS_IMAGE
-              echo "Automatic rollback complete on ${{ matrix.name }}"
-            else
-              echo "No previous image found for rollback on ${{ matrix.name }}"
-              exit 1
-            fi
+            echo "Deployment complete on host ${{ matrix.host }}. App accessible at http://${{ matrix.host }}:3000"
