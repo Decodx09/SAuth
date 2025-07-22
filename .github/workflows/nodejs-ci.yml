@@ -109,3 +109,9 @@ jobs:
             docker run -d -p 3000:3000 --name my-app --restart always ${{ needs.build-and-scan-docker-image.outputs.image_tag }}
             
             echo "Deployment complete on host ${{ matrix.host }}. App accessible at http://${{ matrix.host }}:3000"
+
+  debug-variable:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Print the EC2_HOST variable
+          run: echo "The value is: ${{ vars.EC2_HOST }}"
