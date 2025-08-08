@@ -30,6 +30,70 @@ router.get("/authorize", authController.generateAuthCode);
 router.post("/token", authController.token);
 router.post("/introspect", authController.introspect);  // Token validation endpoint
 
+// Add this GET route to your routes/auth.js file
+router.get("/login", (req, res) => {
+  const { oauth } = req.query;
+  
+  if (oauth === "true") {
+    // Check if theres a stored OAuth request in session
+    const oauthRequest = req.session?.oauthRequest;
+    
+    if (oauthRequest) {
+      res.send(`
+        <h1>Authorize Application</h1>
+        <p><strong>Client Application</strong> wants to access your account.</p>
+        <p><strong>Redirect URI:</strong> ${oauthRequest.redirect_uri}</p>
+        <p><strong>Requested Scopes:</strong> read, write, profile</p>
+        
+        <div style="margin: 20px 0; padding: 20px; border: 1px solid #ddd;">
+          <h3>Please log in to continue:</h3>
+          <form method="POST" action="/api/auth/login" style="margin-bottom: 20px;">
+            <div style="margin: 10px 0;">
+              <label>Email:</label><br>
+              <input type="email" name="email" required style="width: 300px; padding: 5px;">
+            </div>
+            <div style="margin: 10px 0;">
+              <label>Password:</label><br>
+              <input type="password" name="password" required style="width: 300px; padding: 5px;">
+            </div>
+            <input type="hidden" name="oauth_flow" value="true">
+            <button type="submit" style="padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer;">
+              Login & Authorize
+            </button>
+          </form>
+        </div>
+        
+        <p><a href="${oauthRequest.redirect_uri}?error=access_denied&state=${oauthRequest.state || ""}">Cancel Authorization</a></p>
+      `);
+    } else {
+      res.status(400).send(`
+        <h1>Invalid OAuth Request</h1>
+        <p>No OAuth request found in session. Please start the authorization flow again.</p>
+        <p><a href="http://localhost:3001">Go back to client app</a></p>
+      `);
+    }
+  } else {
+    // Regular login page (non-OAuth)
+    res.send(`
+      <h1>OAuth Server Login</h1>
+      <form method="POST" action="/api/auth/login">
+        <div style="margin: 10px 0;">
+          <label>Email:</label><br>
+          <input type="email" name="email" required style="width: 300px; padding: 5px;">
+        </div>
+        <div style="margin: 10px 0;">
+          <label>Password:</label><br>
+          <input type="password" name="password" required style="width: 300px; padding: 5px;">
+        </div>
+        <button type="submit" style="padding: 10px 20px; background: #28a745; color: white; border: none; cursor: pointer;">
+          Login
+        </button>
+      </form>
+    `);
+  }
+});
+
+
 // Public routes
 router.post("/register", authLimiter, validateRegistration, authController.register); // yes
 router.post("/login", authLimiter, validateLogin, authController.login); // yes

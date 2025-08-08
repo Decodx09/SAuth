@@ -5,54 +5,175 @@ const jwt = require("jsonwebtoken");
 const { pool } = require("../config/database");
 const crypto = require("crypto");
 
-// const generateAccessToken = (userId) => {
-//   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
-// };
-
 class AuthController {
 
-  async generateAuthCode(req, res){
+  async generateAuthCode(req, res) {
     try {
-      const { client_id, redirect_uri, state } = req.query;
-      // const { client_id, redirect_uri, state, response_type } = req.query;`
+      const { client_id, redirect_uri, state, response_type } = req.query;
+      
+      console.log("OAuth authorization request received:", { 
+        client_id, 
+        redirect_uri, 
+        state, 
+        response_type,
+        sessionExists: !!req.session,
+        userExists: !!req.user 
+      });
+  
+      // Validate required parameters
+      if (!client_id || !redirect_uri || !response_type) {
+        console.error("Missing required OAuth parameters");
+        return res.status(400).json({ 
+          error: "invalid_request",
+          error_description: "Missing required parameters: client_id, redirect_uri, response_type" 
+        });
+      }
+  
+      // Validate response_type
+      if (response_type !== "code") {
+        console.error("Invalid response_type:", response_type);
+        return res.status(400).json({ 
+          error: "unsupported_response_type",
+          error_description: "Only 'code' response type is supported" 
+        });
+      }
+  
       // Validate client application
+      console.log("Validating client application...");
       const [client] = await pool.execute(
         "SELECT * FROM oauth_clients WHERE client_id = ? AND redirect_uri = ?",
         [client_id, redirect_uri]
       );
       
       if (!client.length) {
-        return res.status(400).json({ error: "Invalid client" });
+        console.error("Invalid client or redirect URI mismatch:", { client_id, redirect_uri });
+        return res.status(400).json({ 
+          error: "invalid_client",
+          error_description: "Invalid client_id or redirect_uri" 
+        });
       }
-      
+  
+      console.log("Client validated successfully:", client[0].name);
+  
+      // Check session availability
+      if (!req.session) {
+        console.error("Session middleware not configured properly");
+        return res.status(500).json({ 
+          error: "server_error",
+          error_description: "Session not available" 
+        });
+      }
+  
       // Check if user is logged in
       if (!req.user) {
-        // Store the OAuth request and redirect to login
-        req.session.oauthRequest = { client_id, redirect_uri, state };
-        return res.redirect("/login?oauth=true");
+        console.log("User not authenticated, storing OAuth request and redirecting to login");
+        
+        // Store the OAuth request in session for after login
+        req.session.oauthRequest = { 
+          client_id, 
+          redirect_uri, 
+          state,
+          response_type,
+          timestamp: Date.now() 
+        };
+  
+        console.log("OAuth request stored in session:", req.session.oauthRequest);
+  
+        // Save session explicitly to ensure it persists
+        req.session.save((err) => {
+          if (err) {
+            console.error("Failed to save session:", err);
+            return res.status(500).json({ 
+              error: "server_error",
+              error_description: "Failed to save session" 
+            });
+          }
+          
+          console.log("Session saved, redirecting to login");
+          return res.redirect("/api/auth/login?oauth=true");
+        });
+        return; // Prevent further execution
       }
-      
-      // Generate authorization code
+  
+      console.log("User authenticated, generating authorization code for user:", req.user.id);
+  
+      // Validate user account status
+      if (!req.user.is_active) {
+        console.error("User account is deactivated:", req.user.id);
+        const errorUrl = new URL(redirect_uri);
+        errorUrl.searchParams.append("error", "access_denied");
+        errorUrl.searchParams.append("error_description", "User account is deactivated");
+        if (state) errorUrl.searchParams.append("state", state);
+        return res.redirect(errorUrl.toString());
+      }
+  
+      // Generate cryptographically secure authorization code
       const code = crypto.randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-      
-      // Store authorization code
-      await pool.execute(
-        "INSERT INTO authorization_codes (code, user_id, client_id, redirect_uri, expires_at) VALUES (?, ?, ?, ?, ?)",
-        [code, req.user.id, client_id, redirect_uri, expiresAt]
-      );
-      
-      // Redirect back to client with code
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+  
+      console.log("Generated authorization code, expires at:", expiresAt);
+  
+      // Store authorization code in database
+      try {
+        await pool.execute(
+          "INSERT INTO authorization_codes (code, user_id, client_id, redirect_uri, expires_at, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+          [code, req.user.id, client_id, redirect_uri, expiresAt]
+        );
+        
+        console.log("Authorization code stored successfully");
+      } catch (dbError) {
+        console.error("Database error storing authorization code:", dbError);
+        return res.status(500).json({ 
+          error: "server_error",
+          error_description: "Failed to generate authorization code" 
+        });
+      }
+  
+      // Clean up any existing OAuth request from session
+      if (req.session.oauthRequest) {
+        delete req.session.oauthRequest;
+        console.log("Cleared OAuth request from session");
+      }
+  
+      // Build redirect URL with authorization code
       const redirectUrl = new URL(redirect_uri);
       redirectUrl.searchParams.append("code", code);
-      if (state) redirectUrl.searchParams.append("state", state);
       
-      res.redirect(redirectUrl.toString());
+      // Include state parameter if provided (CSRF protection)
+      if (state) {
+        redirectUrl.searchParams.append("state", state);
+      }
+  
+      console.log("Redirecting client back with authorization code");
+      console.log("Redirect URL:", redirectUrl.toString());
+  
+     res.redirect(redirectUrl.toString());
     } catch (error) {
       console.error("Authorization error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      
+      // Try to redirect with error if we have redirect_uri
+      if (req.query.redirect_uri) {
+        try {
+          const errorUrl = new URL(req.query.redirect_uri);
+          errorUrl.searchParams.append("error", "server_error");
+          errorUrl.searchParams.append("error_description", "Internal server error");
+          if (req.query.state) {
+            errorUrl.searchParams.append("state", req.query.state);
+          }
+          return res.redirect(errorUrl.toString());
+        } catch (urlError) {
+          console.error("Failed to create error redirect URL:", urlError);
+        }
+      }
+  
+      // Fallback error response
+      res.status(500).json({ 
+        error: "server_error",
+        error_description: "Internal server error" 
+      });
     }
-  };
+  }
+  
 
   async validateToken(req, res) {
     try {
@@ -98,7 +219,6 @@ async authorize(req, res) {
   try {
     const { client_id, redirect_uri, response_type, state, scope } = req.query;
     
-    // Validate required parameters
     if (!client_id || !redirect_uri || response_type !== "code") {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
