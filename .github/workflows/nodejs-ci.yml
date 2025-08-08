@@ -55,54 +55,43 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  prepare-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      hosts: ${{ steps.set-matrix.outputs.hosts }}
-    steps:
-      - id: set-matrix
-        shell: bash
-        run: |
-          # Expect vars.EC2_HOST to be a comma-separated list or a single host
-          raw="${{ vars.EC2_HOST }}"
-          # Convert to JSON array of strings
-          if [[ "$raw" == *","* ]]; then
-            IFS=',' read -r -a arr <<< "$raw"
-            json="["
-            sep=""
-            for h in "${arr[@]}"; do
-              h_trim="$(echo "$h" | xargs)"
-              json="${json}${sep}\"$h_trim\""
-              sep=","
-            done
-            json="${json}]"
-          else
-            h_trim="$(echo "$raw" | xargs)"
-            json="[\"$h_trim\"]"
-          fi
-          echo "hosts=$json" >> "$GITHUB_OUTPUT"
-
   deploy:
-    needs: [build-and-scan-docker-image, prepare-matrix]
+    needs: [build-and-scan-docker-image]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        host: ${{ fromJSON(needs.prepare-matrix.outputs.hosts) }}
+        host: [ "ec2-13-58-60-124.us-east-2.compute.amazonaws.com" ]   # <-- hardcoded
+
     steps:
-      - name: Deploy to EC2 Instance
+      - name: Print runner public IP
+        run: curl ifconfig.me || curl ipinfo.io/ip || curl https://ipecho.net/plain
+
+      - name: DNS lookup for EC2 host
+        run: nslookup ec2-13-58-60-124.us-east-2.compute.amazonaws.com || ping -c 2 ec2-13-58-60-124.us-east-2.compute.amazonaws.com
+
+      - name: Deploy to EC2 Instance (SSH)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ matrix.host }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: 22
+          timeout: 60s
+          command_timeout: 20m
+          debug: true
+          script_stop: true
           script: |
             set -e
+            whoami
+            hostname
+            uname -a
+
+            # Docker logic
             sudo usermod -aG docker ${{ secrets.EC2_USERNAME }} || true
 
             echo "Logging into GHCR..."
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Pull the latest digest/tagged image (you can pick one)
             echo "Pulling image..."
             docker pull ${{ needs.build-and-scan-docker-image.outputs.latest }}
 
