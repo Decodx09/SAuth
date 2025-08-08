@@ -55,6 +55,43 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+  integration-tests:
+    needs: build-and-scan-docker-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run app container for tests
+        run: |
+          docker run -d --name test-app -p 3000:3000 ghcr.io/decodx09/sauth:latest
+          sleep 10      # Give container time to start
+
+      - name: Health check of app (replace with your endpoint)
+        run: |
+          max_tries=10
+          for i in $(seq 1 $max_tries); do
+            sleep 2
+            if curl -sf http://localhost:3000/health; then
+              echo "App is up!"
+              exit 0
+            fi
+          done
+          echo "App did NOT start successfully."
+          exit 1
+
+      - name: Run integration/API tests (optional)
+        run: |
+          # You can use curl or a test runner (jest, mocha, etc) here
+          # Example:
+          curl -sf http://localhost:3000/api/status || exit 1
+
+      - name: Cleanup
+        run: docker rm -f test-app || true
+
   deploy:
     needs: [build-and-scan-docker-image]
     runs-on: ubuntu-latest
