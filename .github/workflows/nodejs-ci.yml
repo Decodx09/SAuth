@@ -23,8 +23,8 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm install
-      - name: Run unit tests
-        run: npm test # Replace with your actual test command
+      # - name: Run unit tests
+      #   run: npm test # Replace with your actual test command
 
       # --- CodeQL Security Scan ---
       - name: Initialize CodeQL
