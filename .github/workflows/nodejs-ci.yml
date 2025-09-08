@@ -60,9 +60,11 @@ jobs:
         with:
           context: .
           push: true
+          # THE FIX: The correct function is toLower(), not toLowerCase().
           tags: |
-            ghcr.io/${{ toLowerCase(github.repository) }}:latest
-            ghcr.io/${{ toLowerCase(github.repository) }}:${{ github.sha }}
+            ghcr.io/${{ toLower(github.repository) }}:latest
+            ghcr.io/${{ toLower(github.repository) }}:${{ github.sha }}
+
   # Job 3 (New): Prepare the deployment matrix for the development environment
   prepare-dev-matrix:
     name: Prepare Development Matrix
@@ -104,14 +106,14 @@ jobs:
               echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
               echo "Pulling latest Docker image..."
-              docker pull ghcr.io/${{ github.repository }}:latest
+              docker pull ghcr.io/${{ toLower(github.repository) }}:latest
 
               echo "Stopping and removing old container..."
               docker stop dev-app || true
               docker rm dev-app || true
 
               echo "Starting new container..."
-              docker run -d -p 80:80 --name dev-app --restart always ghcr.io/${{ github.repository }}:latest
+              docker run -d -p 80:80 --name dev-app --restart always ghcr.io/${{ toLower(github.repository) }}:latest
 
               echo "Deployment to ${{ matrix.host }} was successful!"
             ENDSSH
@@ -164,14 +166,14 @@ jobs:
               echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
               echo "Pulling latest Docker image..."
-              docker pull ghcr.io/${{ github.repository }}:latest
+              docker pull ghcr.io/${{ toLower(github.repository) }}:latest
 
               echo "Stopping and removing old container..."
               docker stop prod-app || true
               docker rm prod-app || true
 
               echo "Starting new container..."
-              docker run -d -p 80:80 --name prod-app --restart always ghcr.io/${{ github.repository }}:latest
+              docker run -d -p 80:80 --name prod-app --restart always ghcr.io/${{ toLower(github.repository) }}:latest
 
               echo "Deployment to ${{ matrix.host }} was successful!"
             ENDSSH
