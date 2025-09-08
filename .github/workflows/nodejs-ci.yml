@@ -1,10 +1,12 @@
 name: Build, Test, and Deploy Application
 
+# This pipeline triggers on any push to the 'main' branch
 on:
   push:
     branches: ["main"]
 
 jobs:
+  # Job 1: Build the application and run all necessary checks
   build-and-test:
     name: Build, Test, and Scan
     runs-on: ubuntu-latest
@@ -12,6 +14,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # --- Add your build/test steps here ---
+      # For example, if it's a Node.js project:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -19,17 +23,19 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm install
-      # - name: Run unit tests
-      #   run: npm test # Replace with your actual test command
+      - name: Run unit tests
+        run: npm test # Replace with your actual test command
 
+      # --- CodeQL Security Scan ---
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: javascript 
+          languages: javascript # Change to your application's language
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
+  # Job 2: Create a single, deployable artifact (a Docker image)
   build-and-push-docker-image:
     name: Build and Push Docker Image
     needs: build-and-test
@@ -54,21 +60,35 @@ jobs:
         with:
           context: .
           push: true
+          # We tag with 'latest' and the unique commit SHA for versioning
           tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ github.sha }}
 
+  # Job 3 (New): Prepare the deployment matrix for the development environment
+  prepare-dev-matrix:
+    name: Prepare Development Matrix
+    needs: build-and-push-docker-image
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: echo "matrix=${{ secrets.DEV_SERVER_HOSTS }}" >> $GITHUB_OUTPUT
+
+  # Job 4: Deploy the artifact to the Development environment
   deploy-to-development:
     name: Deploy to Development
-    needs: build-and-push-docker-image
+    needs: prepare-dev-matrix
     runs-on: ubuntu-latest
     environment: development
     strategy:
       matrix:
-        host: ${{ fromJson(secrets.DEV_SERVER_HOSTS) }}
+        # This now correctly reads the matrix from the output of the previous job
+        host: ${{ fromJson(needs.prepare-dev-matrix.outputs.matrix) }}
     steps:
       - name: Deploy to Server ${{ matrix.host }}
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.JUMP_SERVER_HOST }} 
+          host: ${{ secrets.JUMP_SERVER_HOST }} # 1. Connect to the Jump Server
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
@@ -96,23 +116,36 @@ jobs:
               echo "Deployment to ${{ matrix.host }} was successful!"
             ENDSSH
 
+  # Job 5: The Manual Approval Gate for Production
   wait-for-prod-approval:
     name: Wait for Production Approval
     needs: deploy-to-development
     runs-on: ubuntu-latest
-    environment: production 
+    environment: production # This is the crucial link to the protected environment
     steps:
       - name: Waiting for approval to deploy to production...
         run: echo "Approval received from reviewers. Proceeding to production."
 
+  # Job 6 (New): Prepare the deployment matrix for the production environment
+  prepare-prod-matrix:
+    name: Prepare Production Matrix
+    needs: wait-for-prod-approval
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: echo "matrix=${{ secrets.PROD_SERVER_HOSTS }}" >> $GITHUB_OUTPUT
+
+  # Job 7: Deploy the exact same artifact to the Production environment
   deploy-to-production:
     name: Deploy to Production
-    needs: wait-for-prod-approval
+    needs: prepare-prod-matrix
     runs-on: ubuntu-latest
     environment: production
     strategy:
       matrix:
-        host: ${{ fromJson(secrets.PROD_SERVER_HOSTS) }}
+        host: ${{ fromJson(needs.prepare-prod-matrix.outputs.matrix) }}
     steps:
       - name: Deploy to Server ${{ matrix.host }}
         uses: appleboy/ssh-action@v1.0.3
