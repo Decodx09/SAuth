@@ -36,11 +36,12 @@ jobs:
       #   run: npm test # Replace with your actual test command
 
       - name: Initialize CodeQL
-        uses: github/code-scanning/init@v3
+        uses: github/codeql-action/init@v3
         with:
           languages: javascript # Change to your application's language
+
       - name: Perform CodeQL Analysis
-        uses: github/code-scanning/analyze@v3
+        uses: github/codeql-action/analyze@v3
 
   # Job 3: Create a single, deployable artifact (a Docker image)
   build-and-push-docker-image:
