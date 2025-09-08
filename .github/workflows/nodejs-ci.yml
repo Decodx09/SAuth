@@ -60,9 +60,9 @@ jobs:
         with:
           context: .
           push: true
-          # We tag with 'latest' and the unique commit SHA for versioning
-          tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ github.sha }}
-
+          tags: |
+            ghcr.io/${{ toLowerCase(github.repository) }}:latest
+            ghcr.io/${{ toLowerCase(github.repository) }}:${{ github.sha }}
   # Job 3 (New): Prepare the deployment matrix for the development environment
   prepare-dev-matrix:
     name: Prepare Development Matrix
