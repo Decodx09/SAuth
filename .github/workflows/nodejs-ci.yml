@@ -1,12 +1,10 @@
 name: Build, Test, and Deploy Application
 
-# This pipeline triggers on any push to the 'main' branch
 on:
   push:
     branches: ["main"]
 
 jobs:
-  # Job 1: A setup job to prepare variables that all other jobs will use.
   setup:
     name: Setup CI Variables
     runs-on: ubuntu-latest
@@ -17,10 +15,11 @@ jobs:
         id: set-vars
         run: echo "repo_lowercase=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-  # Job 2: Build the application and run all necessary checks
   build-and-test:
     name: Build, Test, and Scan
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,17 +32,15 @@ jobs:
       - name: Install dependencies
         run: npm install
       # - name: Run unit tests
-      #   run: npm test # Replace with your actual test command
+      #   run: npm test # Currently disabled as per configuration
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: javascript # Change to your application's language
-
+          languages: javascript 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-  # Job 3: Create a single, deployable artifact (a Docker image)
   build-and-push-docker-image:
     name: Build and Push Docker Image
     needs: [setup, build-and-test]
@@ -71,16 +68,13 @@ jobs:
             ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:latest
             ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:${{ github.sha }}
 
-  # Job 4: Deploy the artifact to the Development environment
   deploy-to-development:
     name: Deploy to Development
-    needs: [setup, build-and-push-docker-image] # Simplified dependency
+    needs: [setup, build-and-push-docker-image]
     runs-on: ubuntu-latest
     environment: development
     strategy:
       matrix:
-        # THE FIX: Hardcode the server IPs directly here.
-        # IMPORTANT: Replace these with your 6 development server private IPs.
         host: ["10.1.2.188", "10.1.5.11", "10.1.2.141"]
     steps:
       - name: Deploy to Server ${{ matrix.host }}
@@ -96,18 +90,17 @@ jobs:
             ssh -o StrictHostKeyChecking=no -A ${{ secrets.EC2_USERNAME }}@${{ matrix.host }} << 'ENDSSH'
               set -e
               echo "Logging into GHCR..."
-              echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+              echo "${{ secrets.CR_PAT }}" | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
               echo "Pulling latest Docker image..."
-              docker pull ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:latest
+              sudo docker pull ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:latest
               echo "Stopping and removing old container..."
-              docker stop dev-app || true
-              docker rm dev-app || true
+              sudo docker stop dev-app || true
+              sudo docker rm dev-app || true
               echo "Starting new container..."
-              docker run -d -p 80:80 --name dev-app --restart always ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:latest
+              sudo docker run -d -p 80:80 --name dev-app --restart always ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:latest
               echo "Deployment to ${{ matrix.host }} was successful!"
             ENDSSH
 
-  # Job 5: The Manual Approval Gate for Production
   wait-for-prod-approval:
     name: Wait for Production Approval
     needs: deploy-to-development
@@ -117,16 +110,13 @@ jobs:
       - name: Waiting for approval to deploy to production...
         run: echo "Approval received. Proceeding to production."
 
-  # Job 6: Deploy the exact same artifact to the Production environment
   deploy-to-production:
     name: Deploy to Production
-    needs: [setup, wait-for-prod-approval] # Simplified dependency
+    needs: [setup, wait-for-prod-approval]
     runs-on: ubuntu-latest
     environment: production
     strategy:
       matrix:
-        # THE FIX: Hardcode the server IPs directly here.
-        # IMPORTANT: Replace these with your 3 production server private IPs.
         host: ["10.2.2.10", "10.2.2.11", "10.2.2.12"]
     steps:
       - name: Deploy to Server ${{ matrix.host }}
@@ -142,13 +132,13 @@ jobs:
             ssh -o StrictHostKeyChecking=no -A ${{ secrets.EC2_USERNAME }}@${{ matrix.host }} << 'ENDSSH'
               set -e
               echo "Logging into GHCR..."
-              echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+              echo "${{ secrets.CR_PAT }}" | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
               echo "Pulling latest Docker image..."
-              docker pull ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:latest
+              sudo docker pull ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:latest
               echo "Stopping and removing old container..."
-              docker stop prod-app || true
-              docker rm prod-app || true
+              sudo docker stop prod-app || true
+              sudo docker rm prod-app || true
               echo "Starting new container..."
-              docker run -d -p 80:80 --name prod-app --restart always ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:latest
+              sudo docker run -d -p 80:80 --name prod-app --restart always ghcr.io/${{ needs.setup.outputs.repo_lowercase }}:latest
               echo "Deployment to ${{ matrix.host }} was successful!"
             ENDSSH
